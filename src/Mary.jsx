@@ -401,28 +401,30 @@ function mapCSVToLeads(data) {
 }
 
 // ─── GHL booking email detector ────────────────────────────────────────
+// Subject format: "New Appointment Booked - Tom Hankard"
+// From: info+pfscores.com@send.lcmsgsndr.org
 function detectGHLBooking(emails) {
-  const bookingKeywords = ["appointment confirmed","appointment scheduled","new appointment","booking confirmed","meeting confirmed","call scheduled","call confirmed","new booking"];
-  return emails.filter(e => {
-    const subject = (e.subject || "").toLowerCase();
-    const snippet = (e.snippet || "").toLowerCase();
-    return bookingKeywords.some(k => subject.includes(k) || snippet.includes(k));
-  });
+  return emails.filter(e => /^new appointment booked/i.test(e.subject || ""));
 }
 
-function extractBookingName(email) {
-  // Try to extract prospect name from GHL email subject/snippet
-  // GHL format is often: "Appointment Confirmed: [Name] - [Date]" or "[Name] has booked..."
-  const text = `${email.subject} ${email.snippet}`;
-  const patterns = [
-    /appointment.*?:\s*([A-Z][a-z]+ [A-Z][a-z]+)/i,
-    /([A-Z][a-z]+ [A-Z][a-z]+)\s+has booked/i,
-    /booked.*?with\s+([A-Z][a-z]+ [A-Z][a-z]+)/i,
-    /name[:\s]+([A-Z][a-z]+ [A-Z][a-z]+)/i,
-    /contact[:\s]+([A-Z][a-z]+ [A-Z][a-z]+)/i,
-  ];
-  for (const p of patterns) { const m = text.match(p); if (m) return m[1]; }
-  return null;
+function extractBookingInfo(email) {
+  const subject = email.subject || "";
+  const snippet = email.snippet || "";
+  const combined = `${subject} ${snippet}`;
+
+  // Name from subject: "New Appointment Booked - Tom Hankard"
+  const nameMatch = subject.match(/new appointment booked\s*[-–]\s*(.+)/i);
+  const name = nameMatch?.[1]?.trim() || null;
+
+  // Email from snippet: "Email: thankard@beverlyfcu.com"
+  const emailMatch = combined.match(/email[:\s]+([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/i);
+  const prospectEmail = emailMatch?.[1]?.trim() || null;
+
+  // Date/time from snippet: "Date & Time: Friday, March 13, 2026 9:00 AM"
+  const dateMatch = combined.match(/date\s*(?:&|and)?\s*time[:\s]+([^\n•]+)/i);
+  const appointmentTime = dateMatch?.[1]?.trim() || null;
+
+  return { name, email: prospectEmail, appointmentTime };
 }
 
 // ─── CSV parser ───
@@ -777,13 +779,23 @@ export default function Mary() {
               try {
                 const leads = await fetchOutboundLeads();
                 for (const booking of bookings) {
-                  const prospectName = extractBookingName(booking);
-                  if (prospectName) {
-                    const match = findLeadBySearch(leads, prospectName);
-                    if (match && match.status !== "booked" && match.status !== "second_call" && match.status !== "closed") {
-                      await updateOutboundLead(match.id, { status: "booked" }).catch(() => {});
-                      gmailContext += `\n\n🎉 Auto-detected booking: "${booking.subject}" — moved **${match.company || prospectName}** to Booked in the pipeline.`;
-                    }
+                  const info = extractBookingInfo(booking);
+                  const { name, email: prospectEmail, appointmentTime } = info;
+                  if (!name && !prospectEmail) continue;
+
+                  // Match by email first (most reliable), then fall back to name
+                  let match = null;
+                  if (prospectEmail) {
+                    match = leads.find(l => (l.email || "").toLowerCase() === prospectEmail.toLowerCase());
+                  }
+                  if (!match && name) {
+                    match = findLeadBySearch(leads, name);
+                  }
+
+                  if (match && match.status !== "booked" && match.status !== "second_call" && match.status !== "closed") {
+                    await updateOutboundLead(match.id, { status: "booked" }).catch(() => {});
+                    const timeLabel = appointmentTime ? ` scheduled for ${appointmentTime}` : "";
+                    gmailContext += `\n\n🎉 Auto-detected booking: **${name || prospectEmail}** (${match.company || "unknown company"})${timeLabel} — pipeline updated to Booked.`;
                   }
                 }
               } catch {}
