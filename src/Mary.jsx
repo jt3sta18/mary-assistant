@@ -313,13 +313,16 @@ async function updateOutboundLead(id, updates) {
 }
 
 async function researchInstitution(name) {
-  const res = await fetch(`${OUTBOUND_URL}/api/research`, {
+  // Call Mary's own proxy to avoid CORS (server-to-server to outbound engine)
+  const res = await fetch(`/api/research`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name }),
   });
   if (!res.ok) throw new Error("research_error");
-  return await res.json();
+  const data = await res.json();
+  if (!data.success && !data.institution && !data.ai) throw new Error(data.error || "research_error");
+  return data;
 }
 
 async function findLeadEmail(first_name, last_name, company, domain) {
@@ -1155,16 +1158,20 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
           const inst = result.institution;
           const ai = result.ai;
           if (inst || ai) {
-            let brief = `\n\n---\n📊 **${parsed.research_institution.name} — Research Brief**`;
-            if (inst) brief += `\n\n**${inst.name}** · ${inst.type} · ${inst.city}, ${inst.state}\n**Assets:** ${inst.total_assets} · **Deposits:** ${inst.deposits} · **Branches:** ${inst.branches}${inst.website ? ` · [${inst.website}](https://${inst.website})` : ""}`;
+            let brief = `\n\n---\n📊 **${parsed.research_institution.name} — Research Brief**\n`;
+            // ── FDIC Card ──
+            if (inst) {
+              brief += `\n🏦 **${inst.name}**`;
+              if (inst.type) brief += ` · ${inst.type}`;
+              if (inst.city && inst.state) brief += ` · ${inst.city}, ${inst.state}`;
+              if (inst.website) brief += `\n🌐 ${inst.website}`;
+              brief += `\n💰 **Assets:** ${inst.total_assets || "N/A"}  ·  **Deposits:** ${inst.deposits || "N/A"}  ·  **Branches:** ${inst.branches ?? "N/A"}`;
+            }
+            // ── AI Summary ──
             if (ai?.summary) brief += `\n\n${ai.summary}`;
-            if (ai?.recommended_pitch_angle) brief += `\n\n**Pitch Angle:** ${ai.recommended_pitch_angle}`;
-            if (ai?.likely_priorities?.length) brief += `\n\n**Their Priorities:** ${ai.likely_priorities.join(" · ")}`;
-            if (ai?.likely_concerns?.length) brief += `\n\n**Likely Objections:** ${ai.likely_concerns.join(" · ")}`;
-            if (ai?.discovery_questions?.length) brief += `\n\n**Discovery Questions:**\n${ai.discovery_questions.map(q => `• ${q}`).join("\n")}`;
             researchNote = brief;
           }
-        } catch { researchNote = "\n\n⚠️ Research tool couldn't be reached — try again."; }
+        } catch (e) { researchNote = `\n\n⚠️ Research tool error: ${e.message || "try again"}.`; }
       }
 
       // ─── Update Lead in Pipeline ─────────────────────────────────────
