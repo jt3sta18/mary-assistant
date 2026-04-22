@@ -15,7 +15,7 @@ function MarkdownText({ text, style }) {
 }
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
-const GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send";
+const GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets";
 
 const FINOVEO_KB = `
 ## About Finoveo (Your Company)
@@ -83,6 +83,7 @@ CAPABILITIES:
 - REMINDERS: Set timed push notifications.
 - EMAIL: You CAN send real emails. When the user asks you to send an email, compose it and include a "send_email" field in your JSON response. The app will send it automatically via Gmail.
 - MEMORY: When James tells you something important about himself, his business, a prospect, or a preference, include it in "save_memory" so you can remember it in future conversations.
+- GOOGLE DRIVE & SHEETS: You can create new Google Sheets and write data to existing ones. When a file is attached (CSV or Drive sheet data), it will appear in the conversation context as a table. Use "create_sheet" to create a new spreadsheet, or "write_to_sheet" to append data to an existing one. Always confirm what was written and how many rows.
 
 RULES:
 - When calendar events are provided in the message, use them to answer scheduling questions accurately.
@@ -103,8 +104,14 @@ RULES:
   "send_email": {"to": "recipient@email.com", "subject": "Email subject", "body": "Full email body text"},
   "create_events": [{"title": "event name", "start": "ISO datetime", "end": "ISO datetime", "location": "optional"}],
   "suggested_tasks": [{"title": "task name", "priority": "high|medium|low", "reason": "brief reason why"}],
-  "save_memory": ["concise fact to remember, written as a statement"]
+  "save_memory": ["concise fact to remember, written as a statement"],
+  "create_sheet": {"title": "Sheet name", "values": [["Col A", "Col B"], ["row1a", "row1b"]]},
+  "write_to_sheet": {"spreadsheetId": "sheet_id_here", "range": "Sheet1", "values": [["row1a", "row1b"]]}
 }
+
+When a file is attached to the conversation, it will appear as tabular data. Use that data to answer questions, extract insights, create tasks, or write it to a Google Sheet if asked.
+When the user says "add these to my [sheet name]" or "create a sheet called [name]", use the attached file data as the values.
+When creating or writing to a sheet, structure the values as a 2D array — first row should be headers if the data has them.
 
 Only include fields that are relevant. "message" is always required. Others are optional.
 When the user asks you to send an email, compose it and include a "send_email" field — the system sends it automatically via Gmail.
@@ -265,6 +272,87 @@ function parseResponse(text) {
   return { message: text };
 }
 
+// ─── CSV parser ───
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  return lines.map((line) => {
+    const values = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { inQuotes = !inQuotes; }
+      else if (ch === "," && !inQuotes) { values.push(current.trim()); current = ""; }
+      else { current += ch; }
+    }
+    values.push(current.trim());
+    return values;
+  });
+}
+
+// ─── Google Drive: list recent Sheets ───
+async function fetchDriveSheets(accessToken) {
+  const params = new URLSearchParams({
+    q: "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false",
+    orderBy: "modifiedTime desc",
+    pageSize: "20",
+    fields: "files(id,name,modifiedTime,webViewLink)",
+  });
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (res.status === 401) throw new Error("token_expired");
+  if (!res.ok) throw new Error("drive_error");
+  const data = await res.json();
+  return data.files || [];
+}
+
+// ─── Google Sheets: read a sheet ───
+async function readGoogleSheet(accessToken, spreadsheetId, range = "Sheet1") {
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (res.status === 401) throw new Error("token_expired");
+  if (!res.ok) throw new Error("sheets_read_error");
+  const data = await res.json();
+  return data.values || [];
+}
+
+// ─── Google Sheets: append rows to existing sheet ───
+async function appendToGoogleSheet(accessToken, spreadsheetId, values, range = "Sheet1") {
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ values }),
+    }
+  );
+  if (res.status === 401) throw new Error("token_expired");
+  if (!res.ok) throw new Error("sheets_append_error");
+  return await res.json();
+}
+
+// ─── Google Sheets: create a new sheet and optionally populate it ───
+async function createGoogleSheet(accessToken, title, values = []) {
+  const res = await fetch("https://sheets.googleapis.com/v4/spreadsheets", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      properties: { title },
+      sheets: [{ properties: { title: "Sheet1" } }],
+    }),
+  });
+  if (res.status === 401) throw new Error("token_expired");
+  if (!res.ok) throw new Error("sheets_create_error");
+  const sheet = await res.json();
+  if (values.length && sheet.spreadsheetId) {
+    await appendToGoogleSheet(accessToken, sheet.spreadsheetId, values);
+  }
+  return sheet;
+}
+
 async function loadData(key, fallback) {
   try { const r = await window.storage.get(key); return r ? JSON.parse(r.value) : fallback; } catch { return fallback; }
 }
@@ -321,11 +409,18 @@ export default function Mary() {
   const [replyingTo, setReplyingTo] = useState(null);
   const [replyText, setReplyText] = useState("");
   const [replySending, setReplySending] = useState(false);
+  // Drive / Sheets state
+  const [attachedFile, setAttachedFile] = useState(null); // { name, rows, data: [[...]] }
+  const [driveSheets, setDriveSheets] = useState([]);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [showDrivePicker, setShowDrivePicker] = useState(false);
+  const [driveLoading, setDriveLoading] = useState(false);
   const tokenClientRef = useRef(null);
   const recognitionRef = useRef(null);
   const sendMessageRef = useRef(null);
   const chatEnd = useRef(null);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -429,6 +524,54 @@ export default function Mary() {
     recognitionRef.current = r;
     r.start();
   }, [isListening]);
+
+  // Handle file upload (CSV → parsed 2D array)
+  const handleFileUpload = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setShowAttachMenu(false);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target.result;
+      const data = parseCSV(text);
+      setAttachedFile({ name: file.name, rows: data.length, data });
+      // Switch to chat so user can send a message about the file
+      setTab("chat");
+      setTimeout(() => inputRef.current?.focus(), 100);
+    };
+    reader.readAsText(file);
+    // Reset so same file can be re-uploaded
+    e.target.value = "";
+  }, []);
+
+  // Open Drive picker: fetch recent sheets and show them
+  const openDrivePicker = useCallback(async () => {
+    setShowAttachMenu(false);
+    setShowDrivePicker(true);
+    const token = localStorage.getItem("mary-google-token");
+    if (!token || driveSheets.length) return; // already loaded
+    setDriveLoading(true);
+    try {
+      const sheets = await fetchDriveSheets(token);
+      setDriveSheets(sheets);
+    } catch { setDriveSheets([]); }
+    setDriveLoading(false);
+  }, [driveSheets]);
+
+  // Load a Drive sheet into context
+  const loadDriveSheet = useCallback(async (sheet) => {
+    const token = localStorage.getItem("mary-google-token");
+    if (!token) return;
+    setDriveLoading(true);
+    try {
+      const values = await readGoogleSheet(token, sheet.id);
+      setAttachedFile({ name: sheet.name, rows: values.length, data: values, spreadsheetId: sheet.id, webViewLink: sheet.webViewLink });
+      setShowDrivePicker(false);
+      setTab("chat");
+      setTimeout(() => inputRef.current?.focus(), 100);
+    } catch { alert("Couldn't read that sheet. Try again."); }
+    setDriveLoading(false);
+  }, []);
 
   const connectGoogle = useCallback(() => {
     if (!tokenClientRef.current) return;
@@ -647,6 +790,12 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       if (open.length) ctx += "\nOpen tasks: " + open.map((t) => '"' + t.title + '" (' + t.priority + ", due: " + (t.due || "none") + ")").join(", ");
       if (pending.length) ctx += "\nPending reminders: " + pending.map((r) => '"' + r.title + '" at ' + r.time).join(", ");
       if (!open.length && !pending.length) ctx += "\nNo open tasks or reminders.";
+      // Inject attached file data (CSV or Drive sheet)
+      if (attachedFile) {
+        const preview = attachedFile.data.slice(0, 100).map((r) => r.join("\t")).join("\n");
+        const truncNote = attachedFile.rows > 100 ? `\n... (${attachedFile.rows - 100} more rows not shown)` : "";
+        ctx += `\n\nAttached file: "${attachedFile.name}" — ${attachedFile.rows} rows × ${(attachedFile.data[0] || []).length} columns\n${preview}${truncNote}`;
+      }
       apiMsgs[apiMsgs.length - 1].content += ctx;
       // Attach live Google context when relevant
       const calToken = localStorage.getItem("mary-google-token");
@@ -717,7 +866,38 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         }
       }
 
-      setChat((p) => [...p, { role: "assistant", text: (parsed.message || text) + calNote + emailNote, ts: Date.now() }]);
+      // Handle Google Sheets write/create actions
+      let sheetNote = "";
+      if (parsed.create_sheet || parsed.write_to_sheet) {
+        const shToken = localStorage.getItem("mary-google-token");
+        const shExpiry = localStorage.getItem("mary-google-token-expiry");
+        if (shToken && shExpiry && Date.now() < parseInt(shExpiry)) {
+          try {
+            if (parsed.create_sheet) {
+              const newSheet = await createGoogleSheet(shToken, parsed.create_sheet.title, parsed.create_sheet.values || []);
+              const rowCount = (parsed.create_sheet.values || []).length;
+              sheetNote = `\n\n📊 Created **"${parsed.create_sheet.title}"** in Google Drive`;
+              if (rowCount) sheetNote += ` with ${rowCount} rows`;
+              if (newSheet.spreadsheetUrl) sheetNote += `. [Open in Drive ↗](${newSheet.spreadsheetUrl})`;
+            }
+            if (parsed.write_to_sheet) {
+              const { spreadsheetId, range, values } = parsed.write_to_sheet;
+              await appendToGoogleSheet(shToken, spreadsheetId, values || [], range || "Sheet1");
+              const rowCount = (values || []).length;
+              sheetNote = `\n\n📊 Added ${rowCount} row${rowCount !== 1 ? "s" : ""} to your Google Sheet.`;
+            }
+          } catch {
+            sheetNote = "\n\n⚠️ Couldn't update the sheet — check your Google connection or try reconnecting.";
+          }
+        } else {
+          sheetNote = "\n\n⚠️ Google not connected — reconnect to use Google Sheets.";
+        }
+      }
+
+      // Clear the attached file after sending
+      setAttachedFile(null);
+
+      setChat((p) => [...p, { role: "assistant", text: (parsed.message || text) + calNote + emailNote + sheetNote, ts: Date.now() }]);
     } catch {
       setChat((p) => [...p, { role: "assistant", text: "Something went wrong. Try again.", ts: Date.now() }]);
     }
@@ -901,6 +1081,24 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               </div>
             )}
 
+            {/* Drive Sheets quick access */}
+            {googleToken && (
+              <div style={S.card}>
+                <div style={S.cHead}>
+                  <div style={{...S.headDot, background:"#34a853", boxShadow:"0 0 8px #34a853"}} />
+                  <span style={S.cTitle}>Google Drive</span>
+                  <button onClick={openDrivePicker} style={S.seeAll}>Browse Sheets →</button>
+                </div>
+                <div style={{fontSize:13,color:"#7a96bc",lineHeight:1.6}}>
+                  Upload a CSV or pick a Google Sheet to let Mary read, analyze, or update it — just tell her what to do.
+                </div>
+                <div style={{display:"flex",gap:8,marginTop:12}}>
+                  <button onClick={() => { fileInputRef.current?.click(); }} style={{...S.gcBtn, flex:1, background:"rgba(52,168,83,0.15)", color:"#34a853", border:"1px solid rgba(52,168,83,0.25)"}}>📎 Upload CSV</button>
+                  <button onClick={openDrivePicker} style={{...S.gcBtn, flex:1, background:"rgba(56,170,255,0.12)", color:"#38aaff", border:"1px solid rgba(56,170,255,0.2)"}}>📊 Pick Sheet</button>
+                </div>
+              </div>
+            )}
+
             <div style={S.qActions}>
               <button onClick={() => setTab("chat")} style={S.qBtn}>Ask Mary</button>
               <button onClick={() => setTab("tasks")} style={S.qBtn2}>+ Add a task</button>
@@ -1064,14 +1262,82 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               )}
               <div ref={chatEnd} />
             </div>
+            {/* Hidden file input */}
+            <input ref={fileInputRef} type="file" accept=".csv,.txt" style={{display:"none"}} onChange={handleFileUpload} />
+
+            {/* Attach menu popup */}
+            {showAttachMenu && (
+              <div style={S.attachMenu} onMouseLeave={() => {}}>
+                <button onClick={() => { fileInputRef.current?.click(); setShowAttachMenu(false); }} style={S.attachOpt}>
+                  <span style={{fontSize:18}}>📎</span>
+                  <div><div style={{fontWeight:600,fontSize:13}}>Upload CSV</div><div style={{fontSize:11,color:"#7a96bc"}}>Import leads or data from a file</div></div>
+                </button>
+                <button onClick={openDrivePicker} style={S.attachOpt}>
+                  <span style={{fontSize:18}}>📊</span>
+                  <div><div style={{fontWeight:600,fontSize:13}}>Google Drive Sheet</div><div style={{fontSize:11,color:"#7a96bc"}}>Pick an existing spreadsheet</div></div>
+                </button>
+              </div>
+            )}
+
+            {/* File chip — shows when a file is attached */}
+            {attachedFile && (
+              <div style={S.fileChip}>
+                <span style={{fontSize:14}}>📄</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{attachedFile.name}</div>
+                  <div style={{fontSize:11,color:"#7a96bc"}}>{attachedFile.rows} rows</div>
+                </div>
+                <button onClick={() => setAttachedFile(null)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.3)",cursor:"pointer",fontSize:14,padding:4}}>✕</button>
+              </div>
+            )}
+
             <div style={S.chatBar}>
+              <button onClick={() => setShowAttachMenu((p) => !p)} style={{...S.sendBtn, background: showAttachMenu ? "rgba(52,168,83,0.2)" : "rgba(255,255,255,0.06)", color: showAttachMenu ? "#34a853" : "#7a96bc", boxShadow:"none", fontSize:16}} title="Attach file">📎</button>
               <button onClick={startListening} style={{...S.sendBtn, background: isListening ? "#ef4444" : "rgba(255,255,255,0.06)", color: isListening ? "#fff" : "#7a96bc", boxShadow:"none", fontSize:16}} title="Voice input">🎤</button>
-              <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} placeholder={isListening ? "Listening..." : "Ask Mary anything..."} style={{...S.chatIn, borderColor: isListening ? "rgba(239,68,68,0.4)" : "rgba(255,255,255,0.10)"}} />
+              <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") sendMessage(); setShowAttachMenu(false); }} placeholder={isListening ? "Listening..." : attachedFile ? `Tell Mary what to do with ${attachedFile.name}...` : "Ask Mary anything..."} style={{...S.chatIn, borderColor: isListening ? "rgba(239,68,68,0.4)" : attachedFile ? "rgba(52,168,83,0.4)" : "rgba(255,255,255,0.10)"}} />
               <button onClick={sendMessage} disabled={!input.trim() || loading} style={S.sendBtn}>↑</button>
             </div>
           </div>
         )}
       </main>
+
+      {/* Drive Sheet Picker Overlay */}
+      {showDrivePicker && (
+        <div style={S.overlay} onClick={(e) => { if (e.target === e.currentTarget) setShowDrivePicker(false); }}>
+          <div style={S.pickerSheet}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div>
+                <div style={{fontSize:16,fontWeight:700}}>📊 Google Drive Sheets</div>
+                <div style={{fontSize:12,color:"#7a96bc",marginTop:2}}>Tap a sheet to load it into chat</div>
+              </div>
+              <button onClick={() => setShowDrivePicker(false)} style={{background:"none",border:"none",color:"#7a96bc",cursor:"pointer",fontSize:20,padding:4}}>✕</button>
+            </div>
+            {driveLoading && (
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {[1,2,3,4].map((i) => <div key={i} style={{...S.skel,height:52,borderRadius:12}} />)}
+              </div>
+            )}
+            {!driveLoading && driveSheets.length === 0 && (
+              <div style={{textAlign:"center",padding:"32px 16px",color:"#7a96bc"}}>
+                <div style={{fontSize:32,marginBottom:8}}>📭</div>
+                <div>No Google Sheets found in your Drive</div>
+              </div>
+            )}
+            {!driveLoading && driveSheets.map((sheet) => (
+              <button key={sheet.id} onClick={() => loadDriveSheet(sheet)} style={S.sheetRow}>
+                <span style={{fontSize:20}}>📗</span>
+                <div style={{flex:1,minWidth:0,textAlign:"left"}}>
+                  <div style={{fontSize:14,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sheet.name}</div>
+                  <div style={{fontSize:11,color:"#7a96bc",marginTop:2}}>
+                    Modified {new Date(sheet.modifiedTime).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
+                  </div>
+                </div>
+                <span style={{fontSize:12,color:"#00f5c0",fontWeight:600}}>Load →</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Bottom Nav */}
       <nav style={S.bottomNav}>
@@ -1195,6 +1461,14 @@ const S = {
   // Google
   gcBanner: { display: "flex", alignItems: "center", gap: 12, background: "rgba(56,170,255,0.06)", border: "1px solid rgba(56,170,255,0.15)", borderRadius: 14, padding: "12px 14px", marginBottom: 12 },
   gcBtn: { padding: "6px 14px", background: "#38aaff", color: "#071428", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap" },
+  // Attach menu & file chip
+  attachMenu: { background: "rgba(16,31,58,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.1)", borderTop: "1px solid rgba(255,255,255,0.08)", padding: "8px 8px 0", animation: "slideUp 0.2s ease" },
+  attachOpt: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 14px", background: "none", border: "none", color: "#fff", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", borderRadius: 12, textAlign: "left", transition: "background 0.15s" },
+  fileChip: { display: "flex", alignItems: "center", gap: 10, background: "rgba(52,168,83,0.12)", border: "1px solid rgba(52,168,83,0.3)", borderRadius: 12, padding: "8px 12px", margin: "0 0 6px", animation: "slideUp 0.2s ease" },
+  // Drive picker overlay
+  overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", zIndex: 300, display: "flex", alignItems: "flex-end" },
+  pickerSheet: { background: "rgba(10,20,42,0.98)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: "20px 20px 0 0", padding: "24px 20px 40px", width: "100%", maxHeight: "70vh", overflowY: "auto", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 -8px 48px rgba(0,0,0,0.5)" },
+  sheetRow: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 14px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, marginBottom: 8, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", color: "#fff", transition: "background 0.15s" },
   // Bottom nav
   bottomNav: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, display: "flex", background: "rgba(6,14,30,0.92)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", borderTop: "1px solid rgba(255,255,255,0.07)", padding: "6px 0 env(safe-area-inset-bottom,6px)", zIndex: 100 },
   navBtn: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "6px 0", background: "none", border: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", position: "relative", transition: "color .2s ease" },
