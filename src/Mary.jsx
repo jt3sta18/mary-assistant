@@ -296,9 +296,78 @@ function parseResponse(text) {
 }
 
 // ─── Finoveo Outbound Engine API calls ───────────────────────────────
-async function fetchOutboundLeads(limit = 2000) {
-  // Use local proxy to avoid CORS
-  const res = await fetch(`/api/sheets?scriptUrl=${encodeURIComponent(OUTBOUND_SCRIPT_URL)}&action=getLeads&offset=0&limit=${limit}`);
+
+// Read leads DIRECTLY from the Google Sheet via Sheets API (uses existing OAuth token).
+// This gets ALL rows accurately without pagination limits or CORS issues.
+async function fetchLeadsFromSheetDirect(token) {
+  // ── Step 1: Find the spreadsheet ID (cached in localStorage) ──
+  let sheetId = localStorage.getItem("mary-finoveo-sheet-id");
+  if (!sheetId) {
+    const q = encodeURIComponent("name contains 'Finoveo' and mimeType='application/vnd.google-apps.spreadsheet'");
+    const dr = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&orderBy=modifiedTime+desc`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!dr.ok) throw new Error("drive_error");
+    const dd = await dr.json();
+    const files = dd.files || [];
+    const match = files.find(f => /finoveo outbound/i.test(f.name)) || files.find(f => /finoveo/i.test(f.name));
+    if (!match) throw new Error("sheet_not_found");
+    sheetId = match.id;
+    localStorage.setItem("mary-finoveo-sheet-id", sheetId);
+  }
+
+  // ── Step 2: Get tab name from sheet metadata ──
+  let tabName = localStorage.getItem("mary-finoveo-tab") || "";
+  if (!tabName) {
+    const mr = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties.title`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const md = await mr.json();
+    tabName = md.sheets?.[0]?.properties?.title || "Sheet1";
+    localStorage.setItem("mary-finoveo-tab", tabName);
+  }
+
+  // ── Step 3: Fetch all rows (header + data) in one Sheets API call ──
+  const range = encodeURIComponent(`${tabName}!A:AJ`); // columns A–AJ covers all lead fields
+  const sr = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!sr.ok) throw new Error("sheets_read_error");
+  const sd = await sr.json();
+  const rows = sd.values || [];
+  if (rows.length < 2) return [];
+
+  // ── Step 4: Map rows → lead objects using header row ──
+  const headers = rows[0].map(h =>
+    String(h).toLowerCase().trim().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")
+  );
+  return rows.slice(1).map((row, i) => {
+    const lead = { _row: i + 2 };
+    headers.forEach((h, j) => { if (h) lead[h] = row[j] !== undefined ? row[j] : ""; });
+    lead.lead_score  = parseInt(lead.lead_score)  || 0;
+    lead.linkedin_step = parseInt(lead.linkedin_step) || 0;
+    return lead;
+  }).filter(l => l.id); // skip blank rows
+}
+
+async function fetchOutboundLeads() {
+  // Prefer direct Sheets API read (full accuracy, all rows, no CORS)
+  const token = localStorage.getItem("mary-google-token");
+  if (token) {
+    try { return await fetchLeadsFromSheetDirect(token); } catch (e) {
+      console.warn("Direct sheet read failed, falling back to proxy:", e.message);
+      // Clear cached sheet ID so it re-discovers on next attempt
+      if (e.message === "sheet_not_found" || e.message === "drive_error") {
+        localStorage.removeItem("mary-finoveo-sheet-id");
+        localStorage.removeItem("mary-finoveo-tab");
+      }
+    }
+  }
+  // Fallback: outbound engine proxy (limited to first 2000 leads)
+  const res = await fetch(`/api/sheets?scriptUrl=${encodeURIComponent(OUTBOUND_SCRIPT_URL)}&action=getLeads&offset=0&limit=2000`);
   const data = await res.json();
   if (!data.success) throw new Error(data.error || "Failed to fetch leads");
   return (data.data || []).map(l => ({ ...l, lead_score: parseInt(l.lead_score) || 0, linkedin_step: parseInt(l.linkedin_step) || 0 }));
