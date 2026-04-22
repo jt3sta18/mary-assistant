@@ -1188,7 +1188,10 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       }
 
       // ─── Finoveo Pipeline pre-fetch ──────────────────────────────────
-      const needsPipeline = ["lead", "pipeline", "prospect", "booked", "contacted", "outbound", "stage", "follow up", "followup", "dm sent", "second call", "not interested", "crm", "deal", "closed", "request sent", "accepted"].some((k) => msgLower.includes(k));
+      // Broad keyword list + heuristic: if message contains a proper name pattern (First Last) treat it as a lead lookup
+      const pipelineKeywords = ["lead", "pipeline", "prospect", "booked", "contacted", "outbound", "stage", "follow up", "followup", "dm sent", "second call", "not interested", "crm", "deal", "closed", "request sent", "accepted", "find", "look up", "lookup", "where is", "what stage", "status of", "update on", "check on", "how is", "hear from", "reach out", "connect with", "who is", "any update", "progress on", "contact", "reply", "responded", "interested", "pitched", "bank", "credit union", "cu", "institution", "company", "asset"];
+      const hasProperName = /\b[A-Z][a-z]{1,}\s+[A-Z][a-z]{1,}\b/.test(msg);
+      const needsPipeline = pipelineKeywords.some((k) => msgLower.includes(k)) || hasProperName;
       if (needsPipeline) {
         try {
           const leads = await fetchOutboundLeads();

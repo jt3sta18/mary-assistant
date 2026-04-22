@@ -27,17 +27,23 @@ export default async function handler(req, res) {
   try {
     const total = 11890; // known total — update if sheet grows significantly
 
-    // Fetch a spread of offsets in parallel to sample active leads across the full sheet.
-    // Active pipeline leads (non-not_contacted) are scattered throughout all rows.
-    // By sampling at different offsets we get a representative cross-section.
-    const offsets = [0, 2000, 4000, 6000, 8000, 10000];
-    const limit = 500;
+    // Fetch overlapping chunks spread evenly across the full sheet.
+    // 14 offsets × 600 rows = 8,400 rows sampled ≈ 70% coverage.
+    // All requests are parallel so total wall-clock time stays the same.
+    const limit = 600;
+    const offsets = [0, 850, 1700, 2550, 3400, 4250, 5100, 5950, 6800, 7650, 8500, 9350, 10200, 11000];
 
     const pages = await Promise.all(
       offsets.map(offset => fetchPage(offset, limit))
     );
 
-    const allLeads = pages.flatMap(p => p.data);
+    const seen = new Set();
+    const allLeads = pages.flatMap(p => p.data).filter(l => {
+      const key = l.id || l.email || `${l.first_name}${l.last_name}${l.company}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     const realTotal = pages.find(p => p.total > 0)?.total || total;
 
     return res.status(200).json({
