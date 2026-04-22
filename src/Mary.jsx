@@ -1,24 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
-const CALENDAR_MCP = "https://calendarmcp.googleapis.com/mcp/v1";
-const GMAIL_MCP = "https://gmailmcp.googleapis.com/mcp/v1";
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
+const GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar.readonly";
 
 const SYSTEM_PROMPT = `You are Mary, a sharp personal assistant built by Finoveo. You help the user stay organized by managing their calendar, tasks, and email.
 
-You have access to Google Calendar and Gmail via MCP tools. Use them proactively.
+Calendar events from Google Calendar will be provided directly in the conversation context when available. Use them to answer scheduling questions.
 
 CAPABILITIES:
-- CALENDAR: Check events, spot conflicts, find free time, list upcoming meetings.
+- CALENDAR: Analyze provided calendar events, spot conflicts, find free time, list upcoming meetings.
 - TASKS: Create, complete, and manage the user's task list.
 - REMINDERS: Set timed push notifications.
-- EMAIL: Search emails, read threads, draft emails, and send emails using Gmail tools.
+- EMAIL: Help draft emails and provide communication advice.
 
 RULES:
-- When the user asks about their schedule, ALWAYS use the Google Calendar tools to check.
+- When calendar events are provided in the message, use them to answer scheduling questions accurately.
 - When asked to remind them of something, create a reminder with a specific time.
-- When asked to send, draft, or check email, ALWAYS use the Gmail tools.
-- When sending an email, use the Gmail tools to create and send it. Confirm what you sent in your message.
-- When searching email, use Gmail search and summarize what you find.
 - Be concise and actionable. No fluff.
 - Format dates clearly (e.g., "Tuesday, April 28 at 2:00 PM").
 - If you spot conflicts in their calendar, flag them immediately.
@@ -29,35 +26,52 @@ RULES:
   "tasks_to_complete": ["task title to mark done"],
   "calendar_events": [{"title": "event name", "start": "ISO datetime", "end": "ISO datetime", "location": "optional"}],
   "reminders": [{"title": "reminder text", "time": "ISO datetime string for when to fire the notification"}],
-  "email_action": {"type": "sent|drafted|searched", "summary": "brief description of what was done"},
   "bible_verse": {"text": "The verse text", "reference": "Book Chapter:Verse"}
 }
 
 Only include fields that are relevant. "message" is always required. Others are optional.
 When the daily briefing is requested, ALWAYS include a "bible_verse" field with an inspiring verse for the day. Choose a different verse each day — draw from the full Catholic and Orthodox biblical canon, including the Deuterocanonical books (Sirach, Wisdom, Tobit, Judith, Baruch, 1 & 2 Maccabees). Vary across the Psalms, Proverbs, Gospels, Epistles, Old Testament prophets, and Deuterocanonical wisdom literature. Stay faithful to Catholic and Orthodox tradition. The user's faith is deeply important to them.
-If you use calendar tools, include the events you find in calendar_events.
+When calendar events are provided, include the relevant ones in calendar_events in your response.
 When the user asks you to remind them at a specific time, include a "reminders" entry with the exact ISO datetime.
 If they say something vague like "remind me tomorrow morning", interpret that as 9:00 AM the next day.
 If they say "remind me in 30 minutes", calculate the exact time from now.
-When sending email: compose a professional, clear email unless the user specifies a tone. Always include who it was sent to and the subject in your message.
-When searching email: summarize the most relevant results concisely.
-IMPORTANT: When checking the inbox or summarizing emails, focus ONLY on work-related messages — emails from colleagues, clients, partners, or anything requiring action. IGNORE and do not mention billing notifications, subscription receipts, payment confirmations, promotional emails, newsletters, automated alerts from services, and other non-work noise.
 Today's date and time is ${new Date().toISOString()}.
 The current timezone offset is ${new Date().getTimezoneOffset()} minutes from UTC.`;
 
-async function callClaude(messages, useMCP = true) {
-  const body = { model: "claude-sonnet-4-20250514", max_tokens: 1000, system: SYSTEM_PROMPT, messages };
-  if (useMCP) {
-    body.mcp_servers = [
-      { type: "url", url: CALENDAR_MCP, name: "google-calendar" },
-      { type: "url", url: GMAIL_MCP, name: "gmail" },
-    ];
-  }
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+async function callClaude(messages) {
+  const body = { model: "claude-sonnet-4-5", max_tokens: 1500, system: SYSTEM_PROMPT, messages };
+  const res = await fetch("/api/chat", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
   const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || data.error || "API error");
   return (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
+}
+
+async function fetchCalendarEvents(accessToken, daysAhead = 2) {
+  const now = new Date();
+  const end = new Date(now);
+  end.setDate(end.getDate() + daysAhead);
+  const params = new URLSearchParams({
+    timeMin: now.toISOString(),
+    timeMax: end.toISOString(),
+    singleEvents: "true",
+    orderBy: "startTime",
+    maxResults: "20",
+  });
+  const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (res.status === 401) throw new Error("token_expired");
+  if (!res.ok) throw new Error("calendar_error");
+  const data = await res.json();
+  return (data.items || []).map((ev) => ({
+    title: ev.summary || "(No title)",
+    start: ev.start?.dateTime || ev.start?.date,
+    end: ev.end?.dateTime || ev.end?.date,
+    location: ev.location || null,
+    allDay: !ev.start?.dateTime,
+  }));
 }
 
 function parseResponse(text) {
@@ -111,6 +125,9 @@ export default function Mary() {
   const [quickTask, setQuickTask] = useState("");
   const [notifPerm, setNotifPerm] = useState("default");
   const [fired, setFired] = useState(new Set());
+  const [googleToken, setGoogleToken] = useState(null);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const tokenClientRef = useRef(null);
   const chatEnd = useRef(null);
   const inputRef = useRef(null);
 
@@ -134,6 +151,51 @@ export default function Mary() {
       }
     })();
     if ("Notification" in window) setNotifPerm(Notification.permission);
+
+    // Load stored Google token
+    const storedToken = localStorage.getItem("mary-google-token");
+    const tokenExpiry = localStorage.getItem("mary-google-token-expiry");
+    if (storedToken && tokenExpiry && Date.now() < parseInt(tokenExpiry)) {
+      setGoogleToken(storedToken);
+    } else {
+      localStorage.removeItem("mary-google-token");
+      localStorage.removeItem("mary-google-token-expiry");
+    }
+  }, []);
+
+  // Initialize Google Identity Services
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID) return;
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.onload = () => {
+      tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: GOOGLE_SCOPES,
+        callback: (response) => {
+          if (response.error) return;
+          const expiry = Date.now() + response.expires_in * 1000;
+          setGoogleToken(response.access_token);
+          localStorage.setItem("mary-google-token", response.access_token);
+          localStorage.setItem("mary-google-token-expiry", expiry.toString());
+          setGoogleLoading(false);
+        },
+      });
+    };
+    document.head.appendChild(script);
+    return () => { if (script.parentNode) script.parentNode.removeChild(script); };
+  }, []);
+
+  const connectGoogle = useCallback(() => {
+    if (!tokenClientRef.current) return;
+    setGoogleLoading(true);
+    tokenClientRef.current.requestAccessToken();
+  }, []);
+
+  const disconnectGoogle = useCallback(() => {
+    setGoogleToken(null);
+    localStorage.removeItem("mary-google-token");
+    localStorage.removeItem("mary-google-token-expiry");
   }, []);
 
   // Fetch briefing (only if not cached recently)
@@ -141,20 +203,45 @@ export default function Mary() {
     if (!force) {
       const cached = await loadData("mary-briefing-cache", null);
       if (cached && cached.date === new Date().toDateString()) {
-        // Auto-refresh if cache is more than 3 hours old
         const cacheAge = (Date.now() - (cached.ts || 0)) / 3600000;
         if (cacheAge < 3) return;
       }
     }
     setBriefingLoading(true);
     try {
-      const text = await callClaude([{ role: "user", content: "Give me my daily briefing. Check my calendar for today and tomorrow — list all events with times and flag any conflicts or back-to-back meetings. Also check my Gmail inbox for important WORK-RELATED emails only — skip billing notifications, subscription receipts, promotional emails, newsletters, and automated payment confirmations. Only highlight emails from colleagues, clients, or partners that need my attention. Include a daily Bible verse from the Catholic/Orthodox tradition to start the day with — feel free to draw from the Deuterocanonical books too. Summarize everything concisely." }]);
+      // Fetch real calendar events if Google is connected
+      let calendarContext = "";
+      const token = localStorage.getItem("mary-google-token");
+      const tokenExpiry = localStorage.getItem("mary-google-token-expiry");
+      if (token && tokenExpiry && Date.now() < parseInt(tokenExpiry)) {
+        try {
+          const calEvents = await fetchCalendarEvents(token, 2);
+          if (calEvents.length > 0) {
+            calendarContext = `\n\nHere are my Google Calendar events for today and tomorrow:\n${JSON.stringify(calEvents, null, 2)}`;
+            setEvents(calEvents);
+          } else {
+            calendarContext = "\n\nGoogle Calendar shows no events for today or tomorrow.";
+          }
+        } catch (e) {
+          if (e.message === "token_expired") {
+            setGoogleToken(null);
+            localStorage.removeItem("mary-google-token");
+            localStorage.removeItem("mary-google-token-expiry");
+          }
+        }
+      }
+
+      const briefingMsg = `Give me my daily briefing. ${calendarContext ? "I've provided my calendar events above — summarize them, flag any conflicts or back-to-back meetings." : "I haven't connected Google Calendar yet, so skip the calendar section."} Include a daily Bible verse from the Catholic/Orthodox tradition to start the day with — feel free to draw from the Deuterocanonical books too. Keep it concise.`;
+
+      const text = await callClaude([{ role: "user", content: briefingMsg + calendarContext }]);
       const p = parseResponse(text);
       setBriefing(p.message || text);
-      if (p.calendar_events) setEvents(p.calendar_events);
+      if (p.calendar_events?.length) setEvents(p.calendar_events);
       if (p.bible_verse) setVerse(p.bible_verse);
       await saveData("mary-briefing-cache", { date: new Date().toDateString(), ts: Date.now(), briefing: p.message || text, events: p.calendar_events || [], verse: p.bible_verse || null });
-    } catch { setBriefing("Couldn't fetch your briefing — try refreshing."); }
+    } catch (e) {
+      setBriefing("Couldn't fetch your briefing — try refreshing. " + (e.message || ""));
+    }
     setBriefingLoading(false);
   }, []);
 
@@ -166,7 +253,25 @@ export default function Mary() {
     if (cached && cached.date === new Date().toDateString()) return;
     setTomorrowLoading(true);
     try {
-      const text = await callClaude([{ role: "user", content: "Give me a preview of tomorrow's schedule. Check my calendar for tomorrow and list all events with times. Flag any early meetings, conflicts, or anything I should prepare for tonight. Be concise — this is an end-of-day wind-down summary. Respond with JSON: {\"message\": \"your summary\"}" }]);
+      let calendarContext = "";
+      const token = localStorage.getItem("mary-google-token");
+      const tokenExpiry = localStorage.getItem("mary-google-token-expiry");
+      if (token && tokenExpiry && Date.now() < parseInt(tokenExpiry)) {
+        try {
+          const calEvents = await fetchCalendarEvents(token, 2);
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const tomorrowStr = tomorrow.toDateString();
+          const tomorrowEvents = calEvents.filter((ev) => new Date(ev.start).toDateString() === tomorrowStr);
+          if (tomorrowEvents.length > 0) {
+            calendarContext = `\n\nTomorrow's calendar events:\n${JSON.stringify(tomorrowEvents, null, 2)}`;
+          } else {
+            calendarContext = "\n\nNo events on the calendar for tomorrow.";
+          }
+        } catch {}
+      }
+      const msg = `Give me a preview of tomorrow's schedule.${calendarContext || " I haven't connected Google Calendar, so just give me a brief wind-down message."} Flag any early meetings, conflicts, or anything I should prepare for tonight. Be concise — this is an end-of-day wind-down summary. Respond with JSON: {"message": "your summary"}`;
+      const text = await callClaude([{ role: "user", content: msg + calendarContext }]);
       const p = parseResponse(text);
       const preview = p.message || text;
       setTomorrowPreview(preview);
@@ -263,6 +368,21 @@ export default function Mary() {
       if (pending.length) ctx += "\nPending reminders: " + pending.map((r) => '"' + r.title + '" at ' + r.time).join(", ");
       if (!open.length && !pending.length) ctx += "\nNo open tasks or reminders.";
       apiMsgs[apiMsgs.length - 1].content += ctx;
+      // Attach live calendar context if user asks about schedule
+      const scheduleKeywords = ["calendar", "schedule", "meeting", "event", "appointment", "today", "tomorrow", "week"];
+      const needsCalendar = scheduleKeywords.some((k) => msg.toLowerCase().includes(k));
+      const calToken = localStorage.getItem("mary-google-token");
+      const calExpiry = localStorage.getItem("mary-google-token-expiry");
+      if (needsCalendar && calToken && calExpiry && Date.now() < parseInt(calExpiry)) {
+        try {
+          const calEvents = await fetchCalendarEvents(calToken, 3);
+          if (calEvents.length > 0) {
+            const last = apiMsgs[apiMsgs.length - 1];
+            apiMsgs[apiMsgs.length - 1] = { ...last, content: last.content + `\n\nHere are my Google Calendar events for the next 3 days:\n${JSON.stringify(calEvents, null, 2)}` };
+          }
+        } catch {}
+      }
+
       const text = await callClaude(apiMsgs);
       const parsed = parseResponse(text);
       if (parsed.tasks_to_add) parsed.tasks_to_add.forEach((t) => addTask(t.title, t.due, t.priority || "medium"));
@@ -335,6 +455,22 @@ export default function Mary() {
         {/* ── TODAY ── */}
         {tab === "today" && (
           <div style={S.anim}>
+            {/* Google Calendar connection banner */}
+            {GOOGLE_CLIENT_ID && !googleToken && (
+              <div style={S.gcBanner}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:600,color:"#fff",marginBottom:2}}>📅 Connect Google Calendar</div>
+                  <div style={{fontSize:12,color:"#7a96bc"}}>See your real schedule in the daily briefing</div>
+                </div>
+                <button onClick={connectGoogle} disabled={googleLoading} style={S.gcBtn}>{googleLoading ? "..." : "Connect"}</button>
+              </div>
+            )}
+            {googleToken && (
+              <div style={{...S.gcBanner, background:"rgba(0,219,168,0.06)", borderColor:"rgba(0,219,168,0.2)"}}>
+                <div style={{flex:1,fontSize:12,color:"#00dba8",fontWeight:500}}>✓ Google Calendar connected</div>
+                <button onClick={disconnectGoogle} style={{...S.gcBtn, background:"rgba(255,255,255,0.04)", color:"#7a96bc", border:"1px solid rgba(255,255,255,0.08)"}}>Disconnect</button>
+              </div>
+            )}
             <div style={S.card}>
               <div style={S.cHead}><div style={S.headDot} /><span style={S.cTitle}>Daily Briefing</span><button onClick={() => fetchBriefing(true)} style={S.refreshBtn} disabled={briefingLoading}>{briefingLoading ? "↻" : "↻ Refresh"}</button></div>
               {briefingLoading ? <div style={S.skelWrap}><div style={S.skel}/><div style={{...S.skel,width:"80%"}}/><div style={{...S.skel,width:"60%"}}/></div> : <div style={S.bText}>{briefing}</div>}
@@ -619,4 +755,6 @@ const S = {
   chatBar: { display: "flex", gap: 8, padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.06)", background: "#071428" },
   chatIn: { flex: 1, padding: "10px 14px", background: "#101f3a", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 12, color: "#fff", fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif", outline: "none", fontWeight: 300 },
   sendBtn: { width: 40, height: 40, background: "#00dba8", color: "#071428", border: "none", borderRadius: 12, fontSize: 18, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(0,219,168,0.3)" },
+  gcBanner: { display: "flex", alignItems: "center", gap: 12, background: "rgba(56,170,255,0.06)", border: "1px solid rgba(56,170,255,0.15)", borderRadius: 12, padding: "12px 14px", marginBottom: 12 },
+  gcBtn: { padding: "6px 14px", background: "#38aaff", color: "#071428", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap" },
 };
