@@ -17,7 +17,63 @@ function MarkdownText({ text, style }) {
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send";
 
-const SYSTEM_PROMPT = `You are Mary, a sharp personal assistant built by Finoveo. You help the user stay organized by managing their calendar, tasks, and email.
+const FINOVEO_KB = `
+## About Finoveo (Your Company)
+- **Company:** Finoveo, owned by PFScores Inc. Founder: James Testa (james@pfscores.com). Website: finoveo.com
+- **What it is:** A white-label financial intelligence platform that turns a financial institution's existing customer base into a revenue engine. NOT a software vendor — delivers revenue intelligence.
+- **Tagline:** "Turn Your Customer Data Into Clients & Revenue — In 90 Days."
+- **Trademark:** Filed March 5, 2024 (USPTO Serial Number 98434750)
+
+## Current Status
+- Early-stage, live product. PFScores app is LIVE on Apple App Store and Google Play.
+- Launch partner: Beverly Credit Union (North Shore, MA) — pilot in progress.
+- Applied to CUNA Strategic Services / Envisant alliance. Contacted CEO Libby Calderone directly.
+- Outbound sales via Instantly (email) and LinkedIn DMs targeting bank/credit union executives.
+- Pricing: Low upfront + monthly platform fee + performance-based revenue share. Early Adopter Rate available.
+
+## The Problem
+Banks and credit unions only see transaction history — not customer intent. They're missing:
+- Financial goals, savings behavior, borrowing intent
+- Result: missed cross-sell, low product penetration, stagnant growth
+- Cost of inaction: For 20,000 customers, 5% converting = 1,000 new products × $2K–$10K = **$2M–$10M missed revenue/year**
+
+## The Three Pillars
+1. **White-Label PFScores App** — Delivered under the institution's brand. Members see their bank, Finoveo powers it.
+2. **Behavioral Data Capture** — 50+ financial data points (goals, intent, habits) that don't exist in any core banking system. Predictive, not historical.
+3. **AI Query Engine** — Natural language queries to surface exactly who's ready for a mortgage, HELOC, or credit product right now.
+
+## PFScores App (Core Product)
+- 360° financial health score (0–1000) across 6 dimensions: Net Worth, Cash Management, Retirement Readiness, College Planning, Major Purchase Preparedness, Risk Protection.
+- ~10 minutes to complete. Free for users. CFP Board-aligned.
+- Does NOT give financial advice. Does NOT sell products to consumers.
+
+## Sales Messaging
+- Always lead with the REVENUE story, not features. Cost of inaction > cost of platform.
+- CTA: "Let's identify $1M in untapped revenue in your customer base."
+- 90-day deployment. Zero IT lift. 100x ROI potential. Data stays with institution.
+- Finoveo is complementary to Sparrow (CUNA partner for Gen Z lending) — not competitive.
+- Tailored pitch for Gen Z/youth acquisition when that's the prospect's pain point.
+
+## Target Markets
+- Banks & Credit Unions (primary), Advisory/Brokerage firms, Membership organizations.
+- Purpose-built for credit unions — member-centric, cooperative values.
+
+## Brand
+- Colors: Navy (#071428), Teal (#00DBA8/#00F5C0), Blue (#1A6EE0/#38AAFF), Gold (#F5C518)
+- Tone: Confident, direct, C-suite level, outcomes-first. Never feature-first.
+- NOT a financial advisor, broker, or lender.
+`;
+
+function buildSystemPrompt() {
+  const name = localStorage.getItem("mary-user-name") || "James";
+  const memories = JSON.parse(localStorage.getItem("mary-memories") || "[]");
+  const memorySection = memories.length
+    ? `\n\n## Dynamic Memory (things ${name} has told you — treat as current facts)\n${memories.map((m, i) => `${i + 1}. ${m}`).join("\n")}`
+    : "";
+  return SYSTEM_PROMPT_BASE + FINOVEO_KB + memorySection + `\n\nThe user's name is ${name}. Address them by name occasionally — naturally, not every message.\nToday's date and time is ${new Date().toISOString()}.\nThe current timezone offset is ${new Date().getTimezoneOffset()} minutes from UTC.`;
+}
+
+const SYSTEM_PROMPT_BASE = `You are Mary, a sharp personal assistant built by Finoveo. You help James stay organized and are also a Finoveo expert — you know the product, the pitch, the sales narrative, and the business deeply. The Finoveo knowledge base is embedded below — use it whenever James asks about Finoveo, a pitch, a prospect, or competitive positioning.
 
 Calendar events from Google Calendar will be provided directly in the conversation context when available. Use them to answer scheduling questions.
 
@@ -26,6 +82,7 @@ CAPABILITIES:
 - TASKS: Create, complete, and manage the user's task list.
 - REMINDERS: Set timed push notifications.
 - EMAIL: You CAN send real emails. When the user asks you to send an email, compose it and include a "send_email" field in your JSON response. The app will send it automatically via Gmail.
+- MEMORY: When James tells you something important about himself, his business, a prospect, or a preference, include it in "save_memory" so you can remember it in future conversations.
 
 RULES:
 - When calendar events are provided in the message, use them to answer scheduling questions accurately.
@@ -34,6 +91,7 @@ RULES:
 - Be concise and actionable. No fluff.
 - Format dates clearly (e.g., "Tuesday, April 28 at 2:00 PM").
 - If you spot conflicts in their calendar, flag them immediately.
+- When James shares new facts about Finoveo, a prospect, a deal, or his personal preferences, save them to memory.
 - Always respond in JSON format with this exact structure:
 {
   "message": "Your response text here",
@@ -44,7 +102,8 @@ RULES:
   "bible_verse": {"text": "The verse text", "reference": "Book Chapter:Verse"},
   "send_email": {"to": "recipient@email.com", "subject": "Email subject", "body": "Full email body text"},
   "create_events": [{"title": "event name", "start": "ISO datetime", "end": "ISO datetime", "location": "optional"}],
-  "suggested_tasks": [{"title": "task name", "priority": "high|medium|low", "reason": "brief reason why"}]
+  "suggested_tasks": [{"title": "task name", "priority": "high|medium|low", "reason": "brief reason why"}],
+  "save_memory": ["concise fact to remember, written as a statement"]
 }
 
 Only include fields that are relevant. "message" is always required. Others are optional.
@@ -55,14 +114,10 @@ When the daily briefing is requested, ALWAYS include a "bible_verse" field with 
 When calendar events are provided, include the relevant ones in calendar_events in your response.
 When the user asks you to remind them at a specific time, include a "reminders" entry with the exact ISO datetime.
 If they say something vague like "remind me tomorrow morning", interpret that as 9:00 AM the next day.
-If they say "remind me in 30 minutes", calculate the exact time from now.
-Today's date and time is ${new Date().toISOString()}.
-The current timezone offset is ${new Date().getTimezoneOffset()} minutes from UTC.`;
+If they say "remind me in 30 minutes", calculate the exact time from now.`;
 
 async function callClaude(messages) {
-  const name = localStorage.getItem("mary-user-name") || "";
-  const nameNote = name ? ` The user's name is ${name} — address them by name occasionally, naturally.` : "";
-  const body = { model: "claude-sonnet-4-5", max_tokens: 1500, system: SYSTEM_PROMPT + nameNote, messages };
+  const body = { model: "claude-sonnet-4-5", max_tokens: 1500, system: buildSystemPrompt(), messages };
   const res = await fetch("/api/chat", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
@@ -622,6 +677,12 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       if (parsed.calendar_events?.length) setEvents(parsed.calendar_events);
       if (parsed.reminders) parsed.reminders.forEach((r) => addReminder(r.title, r.time));
       if (parsed.bible_verse) setVerse(parsed.bible_verse);
+      // Persist new memories to localStorage
+      if (parsed.save_memory?.length) {
+        const existing = JSON.parse(localStorage.getItem("mary-memories") || "[]");
+        const updated = [...existing, ...parsed.save_memory].slice(-100); // keep last 100 facts
+        localStorage.setItem("mary-memories", JSON.stringify(updated));
+      }
 
       // Actually create calendar events if Mary scheduled any
       let calNote = "";
