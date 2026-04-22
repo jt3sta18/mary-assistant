@@ -8,7 +8,7 @@ const SYSTEM_PROMPT = `You are Mary, a sharp personal assistant built by Finoveo
 Calendar events from Google Calendar will be provided directly in the conversation context when available. Use them to answer scheduling questions.
 
 CAPABILITIES:
-- CALENDAR: Analyze provided calendar events, spot conflicts, find free time, list upcoming meetings.
+- CALENDAR: Analyze provided calendar events, spot conflicts, find free time, list upcoming meetings. You CAN create real calendar events — use "create_events" in your response and they will be added to Google Calendar automatically.
 - TASKS: Create, complete, and manage the user's task list.
 - REMINDERS: Set timed push notifications.
 - EMAIL: You CAN send real emails. When the user asks you to send an email, compose it and include a "send_email" field in your JSON response. The app will send it automatically via Gmail.
@@ -28,11 +28,13 @@ RULES:
   "calendar_events": [{"title": "event name", "start": "ISO datetime", "end": "ISO datetime", "location": "optional"}],
   "reminders": [{"title": "reminder text", "time": "ISO datetime string for when to fire the notification"}],
   "bible_verse": {"text": "The verse text", "reference": "Book Chapter:Verse"},
-  "send_email": {"to": "recipient@email.com", "subject": "Email subject", "body": "Full email body text"}
+  "send_email": {"to": "recipient@email.com", "subject": "Email subject", "body": "Full email body text"},
+  "create_events": [{"title": "event name", "start": "ISO datetime", "end": "ISO datetime", "location": "optional"}]
 }
 
 Only include fields that are relevant. "message" is always required. Others are optional.
-When the user asks you to send an email, compose it and include a "send_email" field with the to, subject, and body. The system will send it automatically — confirm in your message that you're sending it.
+When the user asks you to send an email, compose it and include a "send_email" field — the system sends it automatically via Gmail.
+When the user asks you to create or schedule a calendar event, include it in "create_events" — the system will add it to Google Calendar automatically. Always confirm what you scheduled in your message.
 When the daily briefing is requested, ALWAYS include a "bible_verse" field with an inspiring verse for the day. Choose a different verse each day — draw from the full Catholic and Orthodox biblical canon, including the Deuterocanonical books (Sirach, Wisdom, Tobit, Judith, Baruch, 1 & 2 Maccabees). Vary across the Psalms, Proverbs, Gospels, Epistles, Old Testament prophets, and Deuterocanonical wisdom literature. Stay faithful to Catholic and Orthodox tradition. The user's faith is deeply important to them.
 When calendar events are provided, include the relevant ones in calendar_events in your response.
 When the user asks you to remind them at a specific time, include a "reminders" entry with the exact ISO datetime.
@@ -88,6 +90,23 @@ async function fetchGmailEmails(accessToken) {
     })
   );
   return details;
+}
+
+async function createCalendarEvent(accessToken, { title, start, end, location }) {
+  const event = {
+    summary: title,
+    location: location || undefined,
+    start: { dateTime: start, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+    end: { dateTime: end, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+  };
+  const res = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify(event),
+  });
+  if (res.status === 401) throw new Error("token_expired");
+  if (!res.ok) throw new Error("calendar_create_error");
+  return await res.json();
 }
 
 async function fetchCalendarEvents(accessToken, daysAhead = 2) {
@@ -450,6 +469,22 @@ export default function Mary() {
       if (parsed.reminders) parsed.reminders.forEach((r) => addReminder(r.title, r.time));
       if (parsed.bible_verse) setVerse(parsed.bible_verse);
 
+      // Actually create calendar events if Mary scheduled any
+      let calNote = "";
+      if (parsed.create_events?.length) {
+        const calToken = localStorage.getItem("mary-google-token");
+        const calExpiry = localStorage.getItem("mary-google-token-expiry");
+        if (calToken && calExpiry && Date.now() < parseInt(calExpiry)) {
+          const results = await Promise.allSettled(parsed.create_events.map((ev) => createCalendarEvent(calToken, ev)));
+          const created = results.filter((r) => r.status === "fulfilled").length;
+          const failed = results.filter((r) => r.status === "rejected").length;
+          if (created > 0) calNote = `\n\n📅 ${created} event${created > 1 ? "s" : ""} added to Google Calendar.`;
+          if (failed > 0) calNote += `\n\n⚠️ ${failed} event${failed > 1 ? "s" : ""} couldn't be created.`;
+        } else {
+          calNote = "\n\n⚠️ Google not connected — couldn't create calendar events.";
+        }
+      }
+
       // Actually send the email if Mary composed one
       let emailNote = "";
       if (parsed.send_email) {
@@ -467,7 +502,7 @@ export default function Mary() {
         }
       }
 
-      setChat((p) => [...p, { role: "assistant", text: (parsed.message || text) + emailNote, ts: Date.now() }]);
+      setChat((p) => [...p, { role: "assistant", text: (parsed.message || text) + calNote + emailNote, ts: Date.now() }]);
     } catch {
       setChat((p) => [...p, { role: "assistant", text: "Something went wrong. Try again.", ts: Date.now() }]);
     }
