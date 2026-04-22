@@ -84,6 +84,37 @@ async function sendGmailEmail(accessToken, { to, subject, body }) {
   return await res.json();
 }
 
+async function scheduleEmailReminders(accessToken, events) {
+  const now = new Date();
+  const todayStr = now.toDateString();
+  const alreadySent = JSON.parse(localStorage.getItem("mary-email-reminders") || "{}");
+  const sentToday = alreadySent[todayStr] || [];
+
+  for (const ev of events) {
+    if (!ev.start || ev.allDay) continue;
+    const startMs = new Date(ev.start).getTime();
+    const key = `${ev.title}-${ev.start}`;
+    if (sentToday.includes(key)) continue;
+
+    // Send email reminder 60 min before (if it's in the future and within 6 hours)
+    const minsUntil = (startMs - Date.now()) / 60000;
+    if (minsUntil > 55 && minsUntil < 360) {
+      const startTime = new Date(ev.start).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      await sendGmailEmail(accessToken, {
+        to: "me",
+        subject: `⏰ Reminder: "${ev.title}" at ${startTime}`,
+        body: `Hi James,\n\nThis is a reminder that you have "${ev.title}" starting at ${startTime}${ev.location ? `\n📍 ${ev.location}` : ""}.\n\nDon't miss it!\n\n— Mary`,
+      }).catch(() => {});
+      sentToday.push(key);
+    }
+  }
+
+  alreadySent[todayStr] = sentToday;
+  // Only keep today
+  const cleaned = { [todayStr]: sentToday };
+  localStorage.setItem("mary-email-reminders", JSON.stringify(cleaned));
+}
+
 async function fetchGoogleProfile(accessToken) {
   try {
     const res = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -279,6 +310,21 @@ export default function Mary() {
     }
   }, []);
 
+  // Register service worker
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+  }, []);
+
+  // Send events to service worker whenever they change
+  useEffect(() => {
+    if (!events.length) return;
+    navigator.serviceWorker?.ready.then((reg) => {
+      reg.active?.postMessage({ type: "SCHEDULE_EVENTS", events });
+    });
+  }, [events]);
+
   // Initialize Google Identity Services
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) return;
@@ -366,6 +412,8 @@ export default function Mary() {
           if (calEvents.length > 0) {
             calendarContext = `\n\nGoogle Calendar events for today and tomorrow:\n${JSON.stringify(calEvents, null, 2)}`;
             setEvents(calEvents);
+            // Schedule email reminders for upcoming meetings
+            scheduleEmailReminders(token, calEvents).catch(() => {});
           } else {
             calendarContext = "\n\nGoogle Calendar shows no events for today or tomorrow.";
           }
@@ -490,10 +538,19 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       });
       events.forEach((ev) => {
         const diff = (new Date(ev.start) - now) / 60000;
-        const k = "cal-" + ev.start;
-        if (diff > 0 && diff <= 10 && !fired.has(k)) {
-          fireNotification("📅 " + ev.title + " in " + Math.round(diff) + " min", ev.location || "");
-          setFired((p) => new Set([...p, k]));
+        [60, 30, 15, 5].forEach((threshold) => {
+          const k = `cal-${ev.start}-${threshold}`;
+          if (diff > threshold - 0.5 && diff <= threshold + 0.5 && !fired.has(k)) {
+            const label = threshold === 60 ? "1 hour" : `${threshold} min`;
+            fireNotification(`📅 ${ev.title} in ${label}`, ev.location || "Tap to open Mary");
+            setFired((p) => new Set([...p, k]));
+          }
+        });
+        // At the moment of the meeting
+        const kNow = `cal-${ev.start}-now`;
+        if (diff > -1 && diff <= 0.5 && !fired.has(kNow)) {
+          fireNotification(`🔴 ${ev.title} is starting NOW`, ev.location || "Don't miss it!");
+          setFired((p) => new Set([...p, kNow]));
         }
       });
     }, 30000);
