@@ -297,80 +297,83 @@ function parseResponse(text) {
 
 // ─── Finoveo Outbound Engine API calls ───────────────────────────────
 
-// Read leads DIRECTLY from the Google Sheet via Sheets API (uses existing OAuth token).
-// This gets ALL rows accurately without pagination limits or CORS issues.
-async function fetchLeadsFromSheetDirect(token) {
-  // ── Step 1: Find the spreadsheet ID (cached in localStorage) ──
-  let sheetId = localStorage.getItem("mary-finoveo-sheet-id");
-  if (!sheetId) {
-    const q = encodeURIComponent("name contains 'Finoveo' and mimeType='application/vnd.google-apps.spreadsheet'");
-    const dr = await fetch(
-      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&orderBy=modifiedTime+desc`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!dr.ok) throw new Error("drive_error");
-    const dd = await dr.json();
-    const files = dd.files || [];
-    const match = files.find(f => /finoveo outbound/i.test(f.name)) || files.find(f => /finoveo/i.test(f.name));
-    if (!match) throw new Error("sheet_not_found");
-    sheetId = match.id;
-    localStorage.setItem("mary-finoveo-sheet-id", sheetId);
-  }
-
-  // ── Step 2: Get tab name from sheet metadata ──
-  let tabName = localStorage.getItem("mary-finoveo-tab") || "";
-  if (!tabName) {
-    const mr = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties.title`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    const md = await mr.json();
-    tabName = md.sheets?.[0]?.properties?.title || "Sheet1";
-    localStorage.setItem("mary-finoveo-tab", tabName);
-  }
-
-  // ── Step 3: Fetch all rows (header + data) in one Sheets API call ──
-  const range = encodeURIComponent(`${tabName}!A:AJ`); // columns A–AJ covers all lead fields
-  const sr = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  if (!sr.ok) throw new Error("sheets_read_error");
-  const sd = await sr.json();
-  const rows = sd.values || [];
-  if (rows.length < 2) return [];
-
-  // ── Step 4: Map rows → lead objects using header row ──
-  const headers = rows[0].map(h =>
-    String(h).toLowerCase().trim().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")
-  );
-  return rows.slice(1).map((row, i) => {
-    const lead = { _row: i + 2 };
-    headers.forEach((h, j) => { if (h) lead[h] = row[j] !== undefined ? row[j] : ""; });
-    lead.lead_score  = parseInt(lead.lead_score)  || 0;
-    lead.linkedin_step = parseInt(lead.linkedin_step) || 0;
-    return lead;
-  }).filter(l => l.id); // skip blank rows
-}
-
+// Read ALL leads via server-side parallel fetcher — no pagination limits, no CORS.
+// /api/pipeline.js fetches all pages from the Apps Script in parallel on the server.
 async function fetchOutboundLeads() {
-  // Prefer direct Sheets API read (full accuracy, all rows, no CORS)
-  const token = localStorage.getItem("mary-google-token");
-  if (token) {
-    try { return await fetchLeadsFromSheetDirect(token); } catch (e) {
-      console.warn("Direct sheet read failed, falling back to proxy:", e.message);
-      // Clear cached sheet ID so it re-discovers on next attempt
-      if (e.message === "sheet_not_found" || e.message === "drive_error") {
-        localStorage.removeItem("mary-finoveo-sheet-id");
-        localStorage.removeItem("mary-finoveo-tab");
+  const normalize = l => ({ ...l, lead_score: parseInt(l.lead_score) || 0, linkedin_step: parseInt(l.linkedin_step) || 0 });
+
+  // Primary: server-side parallel pipeline fetch (gets ALL leads across all pages)
+  try {
+    const res = await fetch("/api/pipeline");
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.data?.length > 0) {
+        return data.data.map(normalize);
       }
     }
+  } catch (e) {
+    console.warn("Pipeline parallel fetch failed:", e.message);
   }
-  // Fallback: outbound engine proxy (limited to first 2000 leads)
+
+  // Fallback: direct Google Sheets API read (requires Google connected)
+  const token = localStorage.getItem("mary-google-token");
+  if (token) {
+    try {
+      let sheetId = localStorage.getItem("mary-finoveo-sheet-id");
+      if (!sheetId) {
+        // Search My Drive AND shared drives for the Finoveo spreadsheet
+        const q = encodeURIComponent("name contains 'Finoveo' and mimeType='application/vnd.google-apps.spreadsheet'");
+        const dr = await fetch(
+          `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&orderBy=modifiedTime+desc&includeItemsFromAllDrives=true&supportsAllDrives=true&corpora=allDrives`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const dd = await dr.json();
+        const files = dd.files || [];
+        const match = files.find(f => /finoveo outbound/i.test(f.name)) || files.find(f => /finoveo/i.test(f.name));
+        if (match) {
+          sheetId = match.id;
+          localStorage.setItem("mary-finoveo-sheet-id", sheetId);
+        }
+      }
+      if (sheetId) {
+        let tabName = localStorage.getItem("mary-finoveo-tab") || "";
+        if (!tabName) {
+          const mr = await fetch(
+            `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties.title`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          const md = await mr.json();
+          tabName = md.sheets?.[0]?.properties?.title || "Sheet1";
+          localStorage.setItem("mary-finoveo-tab", tabName);
+        }
+        const range = encodeURIComponent(`${tabName}!A:AJ`);
+        const sr = await fetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const sd = await sr.json();
+        const rows = sd.values || [];
+        if (rows.length >= 2) {
+          const headers = rows[0].map(h => String(h).toLowerCase().trim().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""));
+          return rows.slice(1).map((row, i) => {
+            const lead = { _row: i + 2 };
+            headers.forEach((h, j) => { if (h) lead[h] = row[j] !== undefined ? row[j] : ""; });
+            return normalize(lead);
+          }).filter(l => l.id);
+        }
+      }
+    } catch (e) {
+      console.warn("Direct Sheets API fallback failed:", e.message);
+      localStorage.removeItem("mary-finoveo-sheet-id");
+      localStorage.removeItem("mary-finoveo-tab");
+    }
+  }
+
+  // Last resort: proxy single page (limited accuracy)
   const res = await fetch(`/api/sheets?scriptUrl=${encodeURIComponent(OUTBOUND_SCRIPT_URL)}&action=getLeads&offset=0&limit=2000`);
   const data = await res.json();
   if (!data.success) throw new Error(data.error || "Failed to fetch leads");
-  return (data.data || []).map(l => ({ ...l, lead_score: parseInt(l.lead_score) || 0, linkedin_step: parseInt(l.linkedin_step) || 0 }));
+  return data.data.map(normalize);
 }
 
 async function updateOutboundLead(id, updates) {
@@ -1078,18 +1081,38 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         try {
           const leads = await fetchOutboundLeads();
           const summary = buildPipelineSummary(leads);
-          // Find specific leads mentioned in the message
-          const words = msg.split(/\s+/).filter(w => w.length > 3);
-          const matching = leads.filter(l => {
-            const hay = `${l.company} ${l.full_name} ${l.first_name} ${l.last_name} ${l.state} ${l.institution_type}`.toLowerCase();
-            return words.some(w => hay.includes(w.toLowerCase()));
-          }).slice(0, 25);
           extra += `\n\n${summary}`;
-          if (matching.length > 0 && matching.length < leads.length) {
-            const slim = matching.map(l => ({ id: l.id, name: l.full_name || `${l.first_name} ${l.last_name}`, company: l.company, title: l.title, state: l.state, status: l.status, email: l.email, asset_size: l.asset_size, institution_type: l.institution_type }));
-            extra += `\n\nMatching leads:\n${JSON.stringify(slim, null, 2)}`;
+
+          // Detect which stages are being asked about
+          const stageMap = { booked:"booked", "second call":"second_call", "2nd call":"second_call", "not interested":"not_interested", closed:"closed", "following up":"following_up", "request sent":"request_sent", "accepted":"accepted_dm", "dm sent":"accepted_dm", "replied":"replied_followup", "follow up":"following_up", "not contacted":"not_contacted" };
+          const askedStatuses = Object.entries(stageMap).filter(([k]) => msgLower.includes(k)).map(([,v]) => v);
+
+          // Always pass active pipeline leads (non-not_contacted) for stage queries
+          const slimLead = l => ({ id: l.id, name: l.full_name || `${l.first_name} ${l.last_name}`.trim(), company: l.company, title: l.title, state: l.state, status: l.status, email: l.email, asset_size: l.asset_size, institution_type: l.institution_type });
+
+          if (askedStatuses.length > 0) {
+            // Specific stage asked — pass all leads in that stage
+            const stageLeads = leads.filter(l => askedStatuses.includes(l.status));
+            extra += `\n\nLeads in requested stage(s) [${askedStatuses.join(", ")}] — ${stageLeads.length} found:\n${JSON.stringify(stageLeads.map(slimLead), null, 2)}`;
+          } else {
+            // General pipeline query — pass all active (non-not_contacted) leads
+            const activeLeads = leads.filter(l => l.status && l.status !== "not_contacted").slice(0, 50);
+            if (activeLeads.length > 0) {
+              extra += `\n\nActive pipeline leads (${activeLeads.length} shown):\n${JSON.stringify(activeLeads.map(slimLead), null, 2)}`;
+            }
+            // Also pass keyword-matched leads
+            const words = msg.split(/\s+/).filter(w => w.length > 3);
+            const matching = leads.filter(l => {
+              const hay = `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase();
+              return words.some(w => hay.includes(w.toLowerCase()));
+            }).slice(0, 25);
+            if (matching.length > 0) {
+              extra += `\n\nKeyword-matched leads:\n${JSON.stringify(matching.map(slimLead), null, 2)}`;
+            }
           }
-        } catch {}
+        } catch (e) {
+          extra += `\n\n⚠️ Could not load pipeline data: ${e.message}`;
+        }
       }
 
       if (extra) {
