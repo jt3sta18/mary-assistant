@@ -142,7 +142,7 @@ When the user asks you to send an email, compose it and include a "send_email" f
 When the user asks to search Gmail, find an old email, or look up correspondence with someone, use "search_gmail" with a proper Gmail query string (e.g. "from:nilendu", "from:ellen subject:finoveo", "to:me newer_than:7d"). The system will execute the search and return the results. Use this any time the user references a past email or conversation thread.
 When the user asks you to create or schedule a calendar event, include it in "create_events" — the system will add it to Google Calendar automatically. Always confirm what you scheduled in your message.
 When emails are provided in the briefing, scan them for action items and include up to 3 proactive task suggestions in "suggested_tasks" — things the user probably needs to do based on the emails.
-When the daily briefing is requested, ALWAYS include a "bible_verse" field with an inspiring verse for the day. Choose a different verse each day — draw from the full Catholic and Orthodox biblical canon, including the Deuterocanonical books (Sirach, Wisdom, Tobit, Judith, Baruch, 1 & 2 Maccabees). Vary across the Psalms, Proverbs, Gospels, Epistles, Old Testament prophets, and Deuterocanonical wisdom literature. Stay faithful to Catholic and Orthodox tradition. The user's faith is deeply important to them.
+When the daily briefing is requested, ALWAYS include a "bible_verse" field with an inspiring verse for the day. Choose a different verse each day — draw from the full Catholic and Orthodox biblical canon, including the Deuterocanonical books (Sirach, Wisdom, Tobit, Judith, Baruch, 1 & 2 Maccabees). Vary across the Psalms, Proverbs, Gospels, Epistles, Old Testament prophets, and Deuterocanonical wisdom literature. Stay faithful to Catholic and Orthodox tradition. The user's faith is deeply important to them. IMPORTANT: Do NOT include the bible verse inside the "message" text — it is displayed in its own dedicated card. Keep the briefing message focused on schedule, tasks, and business context only.
 When calendar events are provided, include the relevant ones in calendar_events in your response.
 When the user asks you to remind them at a specific time, include a "reminders" entry with the exact ISO datetime.
 If they say something vague like "remind me tomorrow morning", interpret that as 9:00 AM the next day.
@@ -1584,24 +1584,6 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                     <button onClick={() => { addTask(t.title, null, t.priority || "medium"); setSuggestedTasks(p => { const n = p.filter((_,idx)=>idx!==i); saveData("mary-suggested-tasks",n); return n; }); }} style={{...S.gcBtn, fontSize:10, padding:"4px 10px"}}>+ Add</button>
                   </div>
                 ))}
-              </div>
-            )}
-
-            {/* Drive Sheets quick access */}
-            {googleToken && (
-              <div style={S.card}>
-                <div style={S.cHead}>
-                  <div style={{...S.headDot, background:"#34a853", boxShadow:"0 0 8px #34a853"}} />
-                  <span style={S.cTitle}>Google Drive</span>
-                  <button onClick={openDrivePicker} style={S.seeAll}>Browse Sheets →</button>
-                </div>
-                <div style={{fontSize:13,color:"#7a96bc",lineHeight:1.6}}>
-                  Upload a CSV or pick a Google Sheet to let Mary read, analyze, or update it — just tell her what to do.
-                </div>
-                <div style={{display:"flex",gap:8,marginTop:12}}>
-                  <button onClick={() => { fileInputRef.current?.click(); }} style={{...S.gcBtn, flex:1, background:"rgba(52,168,83,0.15)", color:"#34a853", border:"1px solid rgba(52,168,83,0.25)"}}>📎 Upload CSV</button>
-                  <button onClick={openDrivePicker} style={{...S.gcBtn, flex:1, background:"rgba(56,170,255,0.12)", color:"#38aaff", border:"1px solid rgba(56,170,255,0.2)"}}>📊 Pick Sheet</button>
-                </div>
               </div>
             )}
 
