@@ -1072,7 +1072,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       reminders.forEach((r) => {
         if (r.fired || fired.has(r.id)) return;
         if (new Date(r.time) <= now) {
-          fireNotification("⏰ Mary Reminder", r.title, { vibrate: [300, 100, 300] });
+          fireNotification("⏰ Reminder", r.title, { vibrate: [300, 100, 300] });
           setFired((p) => new Set([...p, r.id]));
           setReminders((p) => p.map((x) => (x.id === r.id ? { ...x, fired: true } : x)));
         }
