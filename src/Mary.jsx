@@ -3,9 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send";
 
-const getUserName = () => localStorage.getItem("mary-user-name") || "";
-
-const SYSTEM_PROMPT = `You are Mary, a sharp personal assistant built by Finoveo. You help ${getUserName() ? getUserName() : "the user"} stay organized by managing their calendar, tasks, and email.${getUserName() ? ` Address them as ${getUserName()} occasionally — keep it natural, not every message.` : ""}
+const SYSTEM_PROMPT = `You are Mary, a sharp personal assistant built by Finoveo. You help the user stay organized by managing their calendar, tasks, and email.
 
 Calendar events from Google Calendar will be provided directly in the conversation context when available. Use them to answer scheduling questions.
 
@@ -48,7 +46,9 @@ Today's date and time is ${new Date().toISOString()}.
 The current timezone offset is ${new Date().getTimezoneOffset()} minutes from UTC.`;
 
 async function callClaude(messages) {
-  const body = { model: "claude-sonnet-4-5", max_tokens: 1500, system: SYSTEM_PROMPT, messages };
+  const name = localStorage.getItem("mary-user-name") || "";
+  const nameNote = name ? ` The user's name is ${name} — address them by name occasionally, naturally.` : "";
+  const body = { model: "claude-sonnet-4-5", max_tokens: 1500, system: SYSTEM_PROMPT + nameNote, messages };
   const res = await fetch("/api/chat", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
@@ -222,6 +222,7 @@ export default function Mary() {
   const [replySending, setReplySending] = useState(false);
   const tokenClientRef = useRef(null);
   const recognitionRef = useRef(null);
+  const sendMessageRef = useRef(null);
   const chatEnd = useRef(null);
   const inputRef = useRef(null);
 
@@ -300,7 +301,7 @@ export default function Mary() {
     r.interimResults = false;
     r.lang = "en-US";
     r.onstart = () => setIsListening(true);
-    r.onresult = (e) => { setInput(e.results[0][0].transcript); setIsListening(false); };
+    r.onresult = (e) => { const transcript = e.results[0][0].transcript; setInput(transcript); setIsListening(false); setTimeout(() => sendMessageRef.current?.(transcript), 100); };
     r.onerror = () => setIsListening(false);
     r.onend = () => setIsListening(false);
     recognitionRef.current = r;
@@ -487,9 +488,9 @@ export default function Mary() {
     setReminders((p) => [...p, { id: Date.now(), title, time, fired: false }]);
   }, []);
 
-  const sendMessage = async () => {
-    if (!input.trim() || loading) return;
-    const msg = input.trim();
+  const sendMessage = async (overrideText) => {
+    const msg = (typeof overrideText === "string" ? overrideText : input).trim();
+    if (!msg || loading) return;
     const updated = [...chat, { role: "user", text: msg, ts: Date.now() }];
     setChat(updated);
     setInput("");
@@ -572,6 +573,8 @@ export default function Mary() {
     }
     setLoading(false);
   };
+
+  sendMessageRef.current = sendMessage;
 
   const now = new Date();
   const greetBase = now.getHours() < 12 ? "Good morning" : now.getHours() < 17 ? "Good afternoon" : "Good evening";
