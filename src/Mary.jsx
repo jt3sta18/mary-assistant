@@ -118,13 +118,19 @@ RULES:
   "write_to_sheet": {"spreadsheetId": "sheet_id_here", "range": "Sheet1", "values": [["row1a", "row1b"]]},
   "update_lead": {"search": "company or person name to find the lead", "updates": {"status": "booked", "notes": "optional note"}},
   "research_institution": {"name": "FMS Bank"},
-  "find_email": {"first_name": "John", "last_name": "Smith", "company": "Citizens Bank", "domain": "citizensbank.com"}
+  "find_email": {"first_name": "John", "last_name": "Smith", "company": "Citizens Bank", "domain": "citizensbank.com"},
+  "add_lead": {"first_name": "Maria", "last_name": "Chen", "full_name": "Maria Chen", "title": "VP of Digital Banking", "company": "Rockland Trust", "institution_type": "Bank", "state": "MA", "linkedin_url": "", "asset_size": "", "email": "", "persona": "Digital"},
+  "add_leads_bulk": true,
+  "generate_linkedin": {"search": "company or person name of lead in pipeline"}
 }
 
 When pipeline data is in the context, use it to answer questions accurately — counts, specific leads, stage breakdowns.
 When asked to update a lead's status (e.g. "move X to booked"), use update_lead with the company/person name as "search".
 When asked to research a bank or credit union (e.g. "get me the intel on FMS Bank"), use research_institution — this calls FDIC + AI and returns a full pre-call brief.
 When asked to find someone's email, use find_email.
+When asked to add a single lead (e.g. "add John Smith, CEO at FMS Bank in PA"), use add_lead with all available fields. Infer institution_type (Bank or Credit Union) from context. Classify persona from title: CEO/President→CEO, CMO/Marketing→CMO, Digital/Tech/CTO→Digital, Retail/Branch/Lending→Retail, Strategy/BizDev→Strategy, Product→Product.
+When a CSV file is attached and user asks to add/import the leads to the pipeline, set add_leads_bulk: true — the app will handle the column mapping and import automatically.
+When asked to draft LinkedIn outreach for a specific lead (e.g. "draft LinkedIn messages for Sarah at Citizens Bank"), use generate_linkedin with the lead's name or company as "search".
 
 When a file is attached to the conversation, it will appear as tabular data. Use that data to answer questions, extract insights, create tasks, or write it to a Google Sheet if asked.
 When the user says "add these to my [sheet name]" or "create a sheet called [name]", use the attached file data as the values.
@@ -335,6 +341,88 @@ function buildPipelineSummary(leads) {
 function findLeadBySearch(leads, query) {
   const q = query.toLowerCase();
   return leads.find(l => `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase().includes(q));
+}
+
+async function addOutboundLead(lead) {
+  const res = await fetch(`${OUTBOUND_URL}/api/sheets`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scriptUrl: OUTBOUND_SCRIPT_URL, action: "addLead", lead }),
+  });
+  return await res.json();
+}
+
+// ─── Persona classifier (mirrors outbound engine logic) ───
+function classifyPersona(title) {
+  if (!title) return "Other";
+  const t = title.toLowerCase();
+  if (/\b(ceo|president|chairman|chief executive|managing director)\b/.test(t)) return "CEO";
+  if (/\b(cmo|chief marketing|marketing officer|head of marketing|vp.*marketing|marketing director|chief growth)\b/.test(t)) return "CMO";
+  if (/\b(digital|innovation|technology|cto|cio|online banking)\b/.test(t)) return "Digital";
+  if (/\b(retail|consumer|branch|deposit|lending)\b/.test(t)) return "Retail";
+  if (/\b(strategy|strategic|business development)\b/.test(t)) return "Strategy";
+  if (/\b(product officer|product management|chief product|head of product)\b/.test(t)) return "Product";
+  return "Other";
+}
+
+// ─── LinkedIn outreach prompt (mirrors outbound engine logic) ───
+function buildLinkedInPrompt(lead) {
+  const persona = lead.persona || classifyPersona(lead.title);
+  const PA = { CEO:"growth, revenue, fintechs", CMO:"segmentation, acquisition, engagement", Digital:"digital CX, behavioral data", Retail:"cross-sell, deposits, visibility", Strategy:"intelligence, monetizing data", Product:"innovation, data-driven", Other:"efficiency, advantage" };
+  const FIN = "Finoveo sells a white-label client acquisition & data engine (PFScores) to banks/CUs. Behavioral data, customer insights, cross-sell. 90-day deploy, no core changes, 10x deeper data.";
+  return `Generate LinkedIn outreach messages for Finoveo's founder.\n\nFINOVEO: ${FIN}\n\nLEAD: ${lead.full_name || `${lead.first_name} ${lead.last_name}`}, ${lead.title || "?"} at ${lead.company || "?"} (${lead.institution_type || "?"}, ${lead.state || "?"})\nLinkedIn about: ${lead.linkedin_about || "N/A"}\nPersona focus: ${PA[persona] || PA.Other}\n\nConcise, sharp, professional. Peer tone. No flattery.\n\nReturn ONLY valid JSON:\n{"linkedin_connection_note":"<under 280 chars — specific, no fluff>","linkedin_dm_1":"<3-4 sentences — opens with insight, not a pitch>","linkedin_followup_1":"<2-3 sentences — light nudge>","linkedin_followup_2":"<1-2 sentences — final touch>"}`;
+}
+
+// ─── Smart CSV → Lead mapper ───────────────────────────────────────────
+function mapCSVToLeads(data) {
+  if (!data || data.length < 2) return [];
+  const headers = data[0].map(h => String(h).toLowerCase().trim().replace(/\s+/g, "_"));
+  const rows = data.slice(1);
+  const col = (...candidates) => { for (const c of candidates) { const i = headers.findIndex(h => h.includes(c)); if (i >= 0) return i; } return -1; };
+  const firstNameI = col("first_name","first","fname");
+  const lastNameI  = col("last_name","last","lname");
+  const fullNameI  = col("full_name","name","contact");
+  const emailI     = col("email","e-mail");
+  const titleI     = col("title","job_title","position","role","designation");
+  const companyI   = col("company","institution","organization","employer","bank","credit_union","firm");
+  const stateI     = col("state","location","region","province");
+  const linkedinI  = col("linkedin","profile_url","li_url","linkedin_url");
+  const assetI     = col("asset","total_asset","asset_size");
+  const instTypeI  = col("institution_type","inst_type","type","category");
+  const aboutI     = col("about","bio","linkedin_about","description","summary");
+  const get = (row, i) => i >= 0 ? String(row[i] || "").trim() : "";
+  return rows.filter(r => r.some(c => String(c || "").trim())).map(row => {
+    let first = get(row, firstNameI), last = get(row, lastNameI), full = get(row, fullNameI);
+    if (!first && !last && full) { const p = full.split(/\s+/); first = p[0]; last = p.slice(1).join(" "); }
+    else if (!full && (first || last)) full = `${first} ${last}`.trim();
+    const title = get(row, titleI);
+    return { first_name:first, last_name:last, full_name:full, email:get(row,emailI), title, company:get(row,companyI), institution_type:get(row,instTypeI)||"Bank", state:get(row,stateI), linkedin_url:get(row,linkedinI), asset_size:get(row,assetI), linkedin_about:get(row,aboutI), persona:classifyPersona(title), status:"not_contacted" };
+  }).filter(l => l.full_name || l.first_name || l.last_name);
+}
+
+// ─── GHL booking email detector ────────────────────────────────────────
+function detectGHLBooking(emails) {
+  const bookingKeywords = ["appointment confirmed","appointment scheduled","new appointment","booking confirmed","meeting confirmed","call scheduled","call confirmed","new booking"];
+  return emails.filter(e => {
+    const subject = (e.subject || "").toLowerCase();
+    const snippet = (e.snippet || "").toLowerCase();
+    return bookingKeywords.some(k => subject.includes(k) || snippet.includes(k));
+  });
+}
+
+function extractBookingName(email) {
+  // Try to extract prospect name from GHL email subject/snippet
+  // GHL format is often: "Appointment Confirmed: [Name] - [Date]" or "[Name] has booked..."
+  const text = `${email.subject} ${email.snippet}`;
+  const patterns = [
+    /appointment.*?:\s*([A-Z][a-z]+ [A-Z][a-z]+)/i,
+    /([A-Z][a-z]+ [A-Z][a-z]+)\s+has booked/i,
+    /booked.*?with\s+([A-Z][a-z]+ [A-Z][a-z]+)/i,
+    /name[:\s]+([A-Z][a-z]+ [A-Z][a-z]+)/i,
+    /contact[:\s]+([A-Z][a-z]+ [A-Z][a-z]+)/i,
+  ];
+  for (const p of patterns) { const m = text.match(p); if (m) return m[1]; }
+  return null;
 }
 
 // ─── CSV parser ───
@@ -682,6 +770,24 @@ export default function Mary() {
           }
           if (emails.length > 0) {
             gmailContext = `\n\nUnread work emails from the last 2 days:\n${JSON.stringify(emails, null, 2)}`;
+
+            // ─── GHL Booking Auto-Detection ──────────────────────────
+            const bookings = detectGHLBooking(emails);
+            if (bookings.length > 0) {
+              try {
+                const leads = await fetchOutboundLeads();
+                for (const booking of bookings) {
+                  const prospectName = extractBookingName(booking);
+                  if (prospectName) {
+                    const match = findLeadBySearch(leads, prospectName);
+                    if (match && match.status !== "booked" && match.status !== "second_call" && match.status !== "closed") {
+                      await updateOutboundLead(match.id, { status: "booked" }).catch(() => {});
+                      gmailContext += `\n\n🎉 Auto-detected booking: "${booking.subject}" — moved **${match.company || prospectName}** to Booked in the pipeline.`;
+                    }
+                  }
+                }
+              } catch {}
+            }
           } else {
             gmailContext = "\n\nGmail inbox is clear — no unread work emails.";
           }
@@ -981,6 +1087,54 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         }
       }
 
+      // ─── Add Single Lead to Pipeline ────────────────────────────────
+      let addLeadNote = "";
+      if (parsed.add_lead) {
+        try {
+          const lead = { ...parsed.add_lead, persona: parsed.add_lead.persona || classifyPersona(parsed.add_lead.title) };
+          await addOutboundLead(lead);
+          addLeadNote = `\n\n✅ **${lead.full_name || `${lead.first_name} ${lead.last_name}`}** added to the Finoveo pipeline as *Not Contacted*.`;
+        } catch { addLeadNote = "\n\n⚠️ Couldn't add the lead — check the outbound engine connection."; }
+      }
+
+      // ─── Bulk CSV Import to Pipeline ────────────────────────────────
+      let bulkLeadNote = "";
+      if (parsed.add_leads_bulk && attachedFile?.data) {
+        try {
+          const leads = mapCSVToLeads(attachedFile.data);
+          if (leads.length === 0) {
+            bulkLeadNote = "\n\n⚠️ Couldn't map the CSV columns to lead fields. Make sure it has name, title, company, and state columns.";
+          } else {
+            let added = 0, failed = 0;
+            for (const lead of leads) {
+              try { await addOutboundLead(lead); added++; } catch { failed++; }
+              // Small delay to avoid overwhelming the Apps Script
+              await new Promise(r => setTimeout(r, 150));
+            }
+            bulkLeadNote = `\n\n✅ **${added} leads imported** to Finoveo pipeline${failed ? ` (${failed} failed)` : ""}.`;
+            if (added > 0) bulkLeadNote += ` All set to *Not Contacted*.`;
+          }
+        } catch { bulkLeadNote = "\n\n⚠️ Bulk import failed — check your connection."; }
+      }
+
+      // ─── Generate LinkedIn Outreach ──────────────────────────────────
+      let linkedinNote = "";
+      if (parsed.generate_linkedin?.search) {
+        try {
+          const leads = await fetchOutboundLeads();
+          const lead = findLeadBySearch(leads, parsed.generate_linkedin.search);
+          if (lead) {
+            const prompt = buildLinkedInPrompt(lead);
+            const res = await fetch(`${OUTBOUND_URL}/api/generate`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({prompt}) });
+            const data = await res.json();
+            if (data.success && data.data) {
+              const d = data.data;
+              linkedinNote = `\n\n---\n**LinkedIn Outreach for ${lead.full_name || lead.company}**\n\n**🔗 Connection Note** *(under 280 chars)*\n${d.linkedin_connection_note || ""}\n\n**💬 DM #1**\n${d.linkedin_dm_1 || ""}\n\n**↩ Follow-Up #1**\n${d.linkedin_followup_1 || ""}\n\n**↩ Follow-Up #2**\n${d.linkedin_followup_2 || ""}`;
+            } else { linkedinNote = "\n\n⚠️ Couldn't generate LinkedIn messages — try again."; }
+          } else { linkedinNote = `\n\n⚠️ Couldn't find "${parsed.generate_linkedin.search}" in the pipeline. Add them first.`; }
+        } catch { linkedinNote = "\n\n⚠️ LinkedIn generation failed — check connection."; }
+      }
+
       // ─── Research Institution (FDIC + AI pre-call brief) ────────────
       let researchNote = "";
       if (parsed.research_institution?.name) {
@@ -1049,7 +1203,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       // Clear the attached file after sending
       setAttachedFile(null);
 
-      setChat((p) => [...p, { role: "assistant", text: (parsed.message || text) + calNote + emailNote + sheetNote + researchNote + leadNote + emailFindNote, ts: Date.now() }]);
+      setChat((p) => [...p, { role: "assistant", text: (parsed.message || text) + calNote + emailNote + sheetNote + addLeadNote + bulkLeadNote + linkedinNote + researchNote + leadNote + emailFindNote, ts: Date.now() }]);
     } catch {
       setChat((p) => [...p, { role: "assistant", text: "Something went wrong. Try again.", ts: Date.now() }]);
     }
