@@ -585,13 +585,24 @@ async function saveData(key, value) {
   try { await window.storage.set(key, JSON.stringify(value)); } catch {}
 }
 
-function fireNotification(title, body) {
-  if ("Notification" in window && Notification.permission === "granted") {
+async function fireNotification(title, body, options = {}) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const tag = "mary-" + Date.now();
+  // Prefer SW showNotification — works even when tab is backgrounded
+  if ("serviceWorker" in navigator) {
     try {
-      const n = new Notification(title, { body, vibrate: [200, 100, 200], requireInteraction: true, tag: "mary-" + Date.now() });
-      setTimeout(() => n.close(), 30000);
+      const reg = await navigator.serviceWorker.ready;
+      if (reg.active) {
+        reg.active.postMessage({ type: "FIRE_NOTIFICATION", title, options: { body, tag, ...options } });
+        return;
+      }
     } catch {}
   }
+  // Fallback: direct Notification API (foreground only)
+  try {
+    const n = new Notification(title, { body, icon: "/icon-192.png", requireInteraction: true, tag, ...options });
+    setTimeout(() => n.close(), 30000);
+  } catch {}
 }
 
 function formatTime(iso) { try { return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }); } catch { return iso || ""; } }
@@ -728,13 +739,7 @@ export default function Mary() {
     return () => clearInterval(iv);
   }, [googleToken]);
 
-  // Send events to service worker whenever they change
-  useEffect(() => {
-    if (!events.length) return;
-    navigator.serviceWorker?.ready.then((reg) => {
-      reg.active?.postMessage({ type: "SCHEDULE_EVENTS", events });
-    });
-  }, [events]);
+  // (SW no longer does its own scheduling — main thread handles all timing)
 
   // Initialize Google Identity Services
   useEffect(() => {
@@ -1056,39 +1061,41 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       if (h >= 18 && !tomorrowPreview && !tomorrowLoading) {
         fetchTomorrow();
       }
-    }, 30000);
+    }, 15000); // check every 15s for accuracy
     return () => clearInterval(iv);
   }, [fired, tomorrowPreview, tomorrowLoading, fetchTomorrow]);
 
   useEffect(() => {
     const iv = setInterval(() => {
       const now = new Date();
+      // ─── Chat-set reminders ───────────────────────────────────────────
       reminders.forEach((r) => {
         if (r.fired || fired.has(r.id)) return;
         if (new Date(r.time) <= now) {
-          fireNotification("⏰ Mary Reminder", r.title);
+          fireNotification("⏰ Mary Reminder", r.title, { vibrate: [300, 100, 300] });
           setFired((p) => new Set([...p, r.id]));
           setReminders((p) => p.map((x) => (x.id === r.id ? { ...x, fired: true } : x)));
         }
       });
+      // ─── Calendar event alerts ────────────────────────────────────────
       events.forEach((ev) => {
         const diff = (new Date(ev.start) - now) / 60000;
         [60, 30, 15, 5].forEach((threshold) => {
           const k = `cal-${ev.start}-${threshold}`;
-          if (diff > threshold - 0.5 && diff <= threshold + 0.5 && !fired.has(k)) {
+          if (diff > threshold - 0.25 && diff <= threshold + 0.25 && !fired.has(k)) {
             const label = threshold === 60 ? "1 hour" : `${threshold} min`;
-            fireNotification(`📅 ${ev.title} in ${label}`, ev.location || "Tap to open Mary");
+            fireNotification(`📅 ${ev.title} in ${label}`, ev.location || "Tap to open Mary", { vibrate: threshold <= 15 ? [200, 100, 200, 100, 200] : [200] });
             setFired((p) => new Set([...p, k]));
           }
         });
-        // At the moment of the meeting
+        // At the start of the meeting
         const kNow = `cal-${ev.start}-now`;
-        if (diff > -1 && diff <= 0.5 && !fired.has(kNow)) {
-          fireNotification(`🔴 ${ev.title} is starting NOW`, ev.location || "Don't miss it!");
+        if (diff > -0.5 && diff <= 0.25 && !fired.has(kNow)) {
+          fireNotification(`🔴 ${ev.title} is starting NOW`, ev.location || "Don't miss it!", { vibrate: [300, 100, 300, 100, 300] });
           setFired((p) => new Set([...p, kNow]));
         }
       });
-    }, 30000);
+    }, 15000); // check every 15s — reminders accurate to within 15 seconds
     return () => clearInterval(iv);
   }, [reminders, events, fired]);
 
