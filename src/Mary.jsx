@@ -349,49 +349,16 @@ function parseResponse(text) {
 }
 
 // ─── Finoveo Outbound Engine API calls ───────────────────────────────
-// Fetches ALL leads by calling the Apps Script directly from the browser
-// in parallel pages — no Vercel timeout, no setup required, always live.
-const PIPELINE_PAGE_SIZE = 2000;
-const PIPELINE_MAX = 14000; // ceiling above current 11,890
+// Uses /api/pipeline which fetches the real total then pulls ALL pages
+// in parallel — 100% sheet coverage, no CORS issues, no sampling gaps.
 
 async function fetchOutboundLeads() {
   const normalize = l => ({ ...l, lead_score: parseInt(l.lead_score) || 0, linkedin_step: parseInt(l.linkedin_step) || 0 });
-
-  // Build all page offsets upfront
-  const offsets = [];
-  for (let o = 0; o < PIPELINE_MAX; o += PIPELINE_PAGE_SIZE) offsets.push(o);
-
-  try {
-    const pages = await Promise.all(
-      offsets.map(offset =>
-        fetch(`${OUTBOUND_SCRIPT_URL}?action=getLeads&offset=${offset}&limit=${PIPELINE_PAGE_SIZE}`)
-          .then(r => r.json())
-          .catch(() => ({ data: [], total: 0 }))
-      )
-    );
-
-    let allLeads = [];
-    for (const page of pages) {
-      if (!page.data?.length) break; // past the end of the sheet
-      allLeads = allLeads.concat(page.data);
-    }
-    if (allLeads.length > 0) return allLeads.map(normalize);
-  } catch {}
-
-  // Fallback: Vercel proxy (used if Apps Script CORS blocks the direct call)
-  try {
-    const res = await fetch("/api/pipeline");
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && data.data?.length > 0) return data.data.map(normalize);
-    }
-  } catch {}
-
-  // Last resort: single proxy page
-  const res = await fetch(`/api/sheets?scriptUrl=${encodeURIComponent(OUTBOUND_SCRIPT_URL)}&action=getLeads&offset=0&limit=2000`);
+  const res = await fetch("/api/pipeline");
+  if (!res.ok) throw new Error("Pipeline fetch failed");
   const data = await res.json();
   if (!data.success) throw new Error(data.error || "Failed to fetch leads");
-  return data.data.map(normalize);
+  return (data.data || []).map(normalize);
 }
 
 async function updateOutboundLead(id, updates) {
