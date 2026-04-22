@@ -86,7 +86,7 @@ CAPABILITIES:
 - CALENDAR: Analyze provided calendar events, spot conflicts, find free time, list upcoming meetings. You CAN create real calendar events — use "create_events" in your response and they will be added to Google Calendar automatically.
 - TASKS: Create, complete, and manage the user's task list.
 - REMINDERS: Set timed push notifications.
-- EMAIL: You CAN send real emails. When the user asks you to send an email, compose it and include a "send_email" field in your JSON response. The app will send it automatically via Gmail.
+- EMAIL: You CAN send real emails AND search Gmail. When asked to send an email, compose it and include "send_email". When asked to search Gmail or find a past email (e.g. "last email from John", "find email about the meeting"), use "search_gmail" with a Gmail search query string — the app will search and return the results to you.
 - MEMORY: When James tells you something important about himself, his business, a prospect, or a preference, include it in "save_memory" so you can remember it in future conversations.
 - GOOGLE DRIVE & SHEETS: You can create new Google Sheets and write data to existing ones. When a file is attached (CSV or Drive sheet data), it will appear in the conversation context as a table. Use "create_sheet" to create a new spreadsheet, or "write_to_sheet" to append data to an existing one. Always confirm what was written and how many rows.
 - FINOVEO PIPELINE (CRM): You have live access to the Finoveo outbound lead pipeline. When pipeline data is provided in the conversation context, use it to answer questions about leads, stages, and counts. You can update a lead's status or fields using "update_lead". You can trigger a full FDIC + AI research brief on any bank or credit union using "research_institution". You can find a lead's email using "find_email".
@@ -111,6 +111,7 @@ RULES:
   "reminders": [{"title": "reminder text", "time": "ISO datetime string for when to fire the notification"}],
   "bible_verse": {"text": "The verse text", "reference": "Book Chapter:Verse"},
   "send_email": {"to": "recipient@email.com", "subject": "Email subject", "body": "Full email body text"},
+  "search_gmail": {"query": "from:john subject:meeting", "max_results": 10},
   "create_events": [{"title": "event name", "start": "ISO datetime", "end": "ISO datetime", "location": "optional"}],
   "suggested_tasks": [{"title": "task name", "priority": "high|medium|low", "reason": "brief reason why"}],
   "save_memory": ["concise fact to remember, written as a statement"],
@@ -138,6 +139,7 @@ When creating or writing to a sheet, structure the values as a 2D array — firs
 
 Only include fields that are relevant. "message" is always required. Others are optional.
 When the user asks you to send an email, compose it and include a "send_email" field — the system sends it automatically via Gmail.
+When the user asks to search Gmail, find an old email, or look up correspondence with someone, use "search_gmail" with a proper Gmail query string (e.g. "from:nilendu", "from:ellen subject:finoveo", "to:me newer_than:7d"). The system will execute the search and return the results. Use this any time the user references a past email or conversation thread.
 When the user asks you to create or schedule a calendar event, include it in "create_events" — the system will add it to Google Calendar automatically. Always confirm what you scheduled in your message.
 When emails are provided in the briefing, scan them for action items and include up to 3 proactive task suggestions in "suggested_tasks" — things the user probably needs to do based on the emails.
 When the daily briefing is requested, ALWAYS include a "bible_verse" field with an inspiring verse for the day. Choose a different verse each day — draw from the full Catholic and Orthodox biblical canon, including the Deuterocanonical books (Sirach, Wisdom, Tobit, Judith, Baruch, 1 & 2 Maccabees). Vary across the Psalms, Proverbs, Gospels, Epistles, Old Testament prophets, and Deuterocanonical wisdom literature. Stay faithful to Catholic and Orthodox tradition. The user's faith is deeply important to them.
@@ -219,6 +221,56 @@ async function replyToGmail(accessToken, { threadId, messageId, to, subject, bod
   });
   if (!res.ok) throw new Error("reply_error");
   return await res.json();
+}
+
+async function searchGmailEmails(accessToken, query, maxResults = 15) {
+  const params = new URLSearchParams({ q: query, maxResults: String(maxResults) });
+  const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (res.status === 401) throw new Error("token_expired");
+  if (!res.ok) throw new Error("gmail_search_error");
+  const data = await res.json();
+  const messages = data.messages || [];
+  if (!messages.length) return [];
+  const details = await Promise.all(
+    messages.slice(0, maxResults).map(async (m) => {
+      const r = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=full`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const d = await r.json();
+      const hdrs = d.payload?.headers || [];
+      const get = (name) => hdrs.find((h) => h.name === name)?.value || "";
+      // Extract plain text body
+      let body = "";
+      const extractBody = (parts) => {
+        if (!parts) return;
+        for (const p of parts) {
+          if (p.mimeType === "text/plain" && p.body?.data) {
+            try { body = atob(p.body.data.replace(/-/g,"+").replace(/_/g,"/")); } catch {}
+            return;
+          }
+          if (p.parts) extractBody(p.parts);
+        }
+      };
+      if (d.payload?.body?.data) {
+        try { body = atob(d.payload.body.data.replace(/-/g,"+").replace(/_/g,"/")); } catch {}
+      } else { extractBody(d.payload?.parts); }
+      return {
+        id: m.id,
+        threadId: d.threadId,
+        messageId: get("Message-ID"),
+        from: get("From"),
+        to: get("To"),
+        subject: get("Subject"),
+        date: get("Date"),
+        snippet: d.snippet,
+        body: body.slice(0, 2000), // cap body at 2000 chars
+      };
+    })
+  );
+  return details.filter(Boolean);
 }
 
 async function fetchGmailEmails(accessToken) {
@@ -1064,7 +1116,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
 
       if (calToken && calExpiry && Date.now() < parseInt(calExpiry)) {
         const needsCalendar = ["calendar", "schedule", "meeting", "event", "appointment", "today", "tomorrow", "week"].some((k) => msgLower.includes(k));
-        const needsEmail = ["email", "inbox", "gmail", "mail", "message", "unread"].some((k) => msgLower.includes(k));
+        const needsEmail = ["email", "inbox", "gmail", "mail", "message", "unread", "sent", "last email", "search my", "find email", "from nilendu", "from andy", "from ellen", "from matt", "correspondence", "thread"].some((k) => msgLower.includes(k));
         try {
           const [calEvents, emails] = await Promise.all([
             needsCalendar ? fetchCalendarEvents(calToken, 3).catch(() => []) : Promise.resolve([]),
@@ -1164,6 +1216,42 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
           }
         } else {
           emailNote = "\n\n⚠️ Google not connected — couldn't send the email.";
+        }
+      }
+
+      // ─── Gmail Search ─────────────────────────────────────────────────
+      let gmailSearchNote = "";
+      if (parsed.search_gmail?.query) {
+        const searchToken = localStorage.getItem("mary-google-token");
+        const searchExpiry = localStorage.getItem("mary-google-token-expiry");
+        if (searchToken && searchExpiry && Date.now() < parseInt(searchExpiry)) {
+          try {
+            const results = await searchGmailEmails(searchToken, parsed.search_gmail.query, parsed.search_gmail.max_results || 10);
+            if (results.length === 0) {
+              gmailSearchNote = `\n\n📭 Gmail search for "${parsed.search_gmail.query}" returned no results.`;
+            } else {
+              const formatted = results.map((e, i) =>
+                `**${i + 1}. ${e.subject || "(no subject)"}**\nFrom: ${e.from}\nDate: ${e.date}\n${e.body || e.snippet || ""}`
+              ).join("\n\n---\n\n");
+              gmailSearchNote = `\n\n---\n📧 **Gmail Search Results** (${results.length} emails found for "${parsed.search_gmail.query}")\n\n${formatted}`;
+              // Re-ask Claude with the search results injected so it can answer properly
+              const followUp = [...apiMsgs, { role: "assistant", content: text }, {
+                role: "user",
+                content: `Here are the Gmail search results:\n\n${JSON.stringify(results, null, 2)}\n\nBased on these emails, answer the original question.`
+              }];
+              try {
+                const followText = await callClaude(followUp);
+                const followParsed = parseResponse(followText);
+                if (followParsed.message) {
+                  gmailSearchNote = `\n\n---\n📧 **Gmail: "${parsed.search_gmail.query}"**\n\n${followParsed.message}`;
+                }
+              } catch {}
+            }
+          } catch (e) {
+            gmailSearchNote = `\n\n⚠️ Gmail search failed: ${e.message}`;
+          }
+        } else {
+          gmailSearchNote = "\n\n⚠️ Google not connected — connect Google to search Gmail.";
         }
       }
 
@@ -1315,7 +1403,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       // Clear the attached file after sending
       setAttachedFile(null);
 
-      setChat((p) => [...p, { role: "assistant", text: (parsed.message || text) + calNote + emailNote + sheetNote + addLeadNote + bulkLeadNote + linkedinNote + researchNote + leadNote + emailFindNote, ts: Date.now() }]);
+      setChat((p) => [...p, { role: "assistant", text: (parsed.message || text) + calNote + emailNote + gmailSearchNote + sheetNote + addLeadNote + bulkLeadNote + linkedinNote + researchNote + leadNote + emailFindNote, ts: Date.now() }]);
     } catch {
       setChat((p) => [...p, { role: "assistant", text: "Something went wrong. Try again.", ts: Date.now() }]);
     }
