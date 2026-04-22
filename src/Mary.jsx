@@ -650,7 +650,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       <header style={S.header}>
         <div style={S.headerRow}>
           <div>
-            <div style={S.logo}><span style={gradText}>{userName ? `Hi, ${userName}` : "Mary"}</span></div>
+            <div style={S.logo}><span style={gradText}>{`Hi, ${userName || "James"}`}</span></div>
             <div style={S.dateLbl}>{dateStr}</div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
