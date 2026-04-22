@@ -1479,8 +1479,9 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       setAttachedFile(null);
 
       setChat((p) => [...p, { role: "assistant", text: (parsed.message || text) + calNote + emailNote + gmailSearchNote + sheetNote + addLeadNote + bulkLeadNote + linkedinNote + researchNote + leadNote + emailFindNote, ts: Date.now() }]);
-    } catch {
-      setChat((p) => [...p, { role: "assistant", text: "Something went wrong. Try again.", ts: Date.now() }]);
+    } catch (err) {
+      const detail = err?.message || String(err) || "unknown";
+      setChat((p) => [...p, { role: "assistant", text: `Something went wrong: \`${detail}\`\n\nTry again.`, ts: Date.now() }]);
     }
     setLoading(false);
   };
