@@ -150,7 +150,7 @@ If they say something vague like "remind me tomorrow morning", interpret that as
 If they say "remind me in 30 minutes", calculate the exact time from now.`;
 
 async function callClaude(messages) {
-  const body = { model: "claude-sonnet-4-5", max_tokens: 1500, system: buildSystemPrompt(), messages };
+  const body = { model: "claude-sonnet-4-20250514", max_tokens: 1500, system: buildSystemPrompt(), messages };
   const res = await fetch("/api/chat", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
@@ -819,7 +819,20 @@ export default function Mary() {
     setShowAttachMenu(false);
     const ext = file.name.split(".").pop().toLowerCase();
 
-    if (ext === "pdf") {
+    if (["jpg","jpeg","png","gif","webp","heic"].includes(ext)) {
+      // Read image as base64 so Claude can see it
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const dataUrl = ev.target.result;
+        const base64 = dataUrl.split(",")[1];
+        const mimeMap = { jpg:"image/jpeg", jpeg:"image/jpeg", png:"image/png", gif:"image/gif", webp:"image/webp", heic:"image/jpeg" };
+        const mediaType = mimeMap[ext] || "image/jpeg";
+        setAttachedFile({ name: file.name, type: "image", base64, mediaType, previewUrl: dataUrl });
+        setTab("chat");
+        setTimeout(() => inputRef.current?.focus(), 100);
+      };
+      reader.readAsDataURL(file);
+    } else if (ext === "pdf") {
       // Read as base64 so Claude can natively understand the PDF
       const reader = new FileReader();
       reader.onload = (ev) => {
@@ -1140,20 +1153,20 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       if (open.length) ctx += "\nOpen tasks: " + open.map((t) => '"' + t.title + '" (' + t.priority + ", due: " + (t.due || "none") + ")").join(", ");
       if (pending.length) ctx += "\nPending reminders: " + pending.map((r) => '"' + r.title + '" at ' + r.time).join(", ");
       if (!open.length && !pending.length) ctx += "\nNo open tasks or reminders.";
-      // Inject attached file data (CSV/Excel as text preview, PDF as native content block)
-      if (attachedFile && attachedFile.type !== "pdf") {
+      // Inject attached file data (CSV/Excel as text preview; PDF/image as native content blocks)
+      if (attachedFile && attachedFile.type === "table") {
         const preview = attachedFile.data.slice(0, 100).map((r) => r.join("\t")).join("\n");
         const truncNote = attachedFile.rows > 100 ? `\n... (${attachedFile.rows - 100} more rows not shown)` : "";
         ctx += `\n\nAttached file: "${attachedFile.name}" — ${attachedFile.rows} rows × ${(attachedFile.data[0] || []).length} columns\n${preview}${truncNote}`;
       }
       apiMsgs[apiMsgs.length - 1].content += ctx;
-      // For PDF: convert last message to content-block array so Claude reads the PDF natively
-      if (attachedFile?.type === "pdf") {
+      // For PDF or image: convert last message content to array of content blocks
+      if (attachedFile?.type === "pdf" || attachedFile?.type === "image") {
         const lastMsg = apiMsgs[apiMsgs.length - 1];
-        lastMsg.content = [
-          { type: "document", source: { type: "base64", media_type: "application/pdf", data: attachedFile.base64 } },
-          { type: "text", text: lastMsg.content },
-        ];
+        const mediaBlock = attachedFile.type === "pdf"
+          ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: attachedFile.base64 } }
+          : { type: "image", source: { type: "base64", media_type: attachedFile.mediaType, data: attachedFile.base64 } };
+        lastMsg.content = [mediaBlock, { type: "text", text: lastMsg.content }];
       }
       // Attach live Google context when relevant
       const calToken = localStorage.getItem("mary-google-token");
@@ -1216,7 +1229,15 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
 
       if (extra) {
         const last = apiMsgs[apiMsgs.length - 1];
-        apiMsgs[apiMsgs.length - 1] = { ...last, content: last.content + extra };
+        if (Array.isArray(last.content)) {
+          // Content is already a block array (PDF/image) — append extra to the text block
+          const textBlock = last.content.find(b => b.type === "text");
+          if (textBlock) textBlock.text += extra;
+          else last.content.push({ type: "text", text: extra });
+        } else {
+          last.content += extra;
+        }
+        apiMsgs[apiMsgs.length - 1] = last;
       }
 
       const text = await callClaude(apiMsgs);
@@ -1806,12 +1827,12 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
 
             {/* ── Input toolbar — pinned to bottom, never scrolls ── */}
             <div style={S.chatBottom}>
-              <input ref={fileInputRef} type="file" accept=".csv,.txt,.xlsx,.xls,.pdf" style={{display:"none"}} onChange={handleFileUpload} />
+              <input ref={fileInputRef} type="file" accept=".csv,.txt,.xlsx,.xls,.pdf,.jpg,.jpeg,.png,.gif,.webp,.heic" style={{display:"none"}} onChange={handleFileUpload} />
               {showAttachMenu && (
                 <div style={S.attachMenu} onMouseLeave={() => {}}>
                   <button onClick={() => { fileInputRef.current?.click(); setShowAttachMenu(false); }} style={S.attachOpt}>
                     <span style={{fontSize:18}}>📎</span>
-                    <div><div style={{fontWeight:600,fontSize:13}}>Upload File</div><div style={{fontSize:11,color:"#7a96bc"}}>CSV, Excel (.xlsx), or PDF</div></div>
+                    <div><div style={{fontWeight:600,fontSize:13}}>Upload File</div><div style={{fontSize:11,color:"#7a96bc"}}>CSV, Excel, PDF, or Image</div></div>
                   </button>
                   <button onClick={openDrivePicker} style={S.attachOpt}>
                     <span style={{fontSize:18}}>📊</span>
@@ -1821,10 +1842,13 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               )}
               {attachedFile && (
                 <div style={S.fileChip}>
-                  <span style={{fontSize:14}}>{attachedFile.type === "pdf" ? "📕" : attachedFile.name.endsWith(".xlsx") || attachedFile.name.endsWith(".xls") ? "📊" : "📄"}</span>
+                  {attachedFile.type === "image" && attachedFile.previewUrl
+                    ? <img src={attachedFile.previewUrl} alt="" style={{width:36,height:36,borderRadius:6,objectFit:"cover",flexShrink:0}} />
+                    : <span style={{fontSize:14}}>{attachedFile.type === "pdf" ? "📕" : attachedFile.name.endsWith(".xlsx") || attachedFile.name.endsWith(".xls") ? "📊" : "📄"}</span>
+                  }
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{attachedFile.name}</div>
-                    <div style={{fontSize:11,color:"#7a96bc"}}>{attachedFile.type === "pdf" ? "PDF — ready to read" : `${attachedFile.rows} rows`}</div>
+                    <div style={{fontSize:11,color:"#7a96bc"}}>{attachedFile.type === "pdf" ? "PDF — ready to read" : attachedFile.type === "image" ? "Image — Mary can see this" : `${attachedFile.rows} rows`}</div>
                   </div>
                   <button onClick={() => setAttachedFile(null)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.3)",cursor:"pointer",fontSize:14,padding:4}}>✕</button>
                 </div>
