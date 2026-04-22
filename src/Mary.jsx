@@ -17,6 +17,11 @@ function MarkdownText({ text, style }) {
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets";
 
+// ─── Finoveo Outbound Engine ───────────────────────────────────────────
+const OUTBOUND_URL = "https://finoveo-outbound.vercel.app";
+const OUTBOUND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxPIKISYEKfmiqve9lUGPR8X5__ZJHyRqE5Y_5hVFHmHnDEurz1VmlASrQAbT2CFpk4/exec";
+const PIPELINE_STAGES = { not_contacted:"Not Contacted", request_sent:"Request Sent", accepted_dm:"Accepted / DM Sent", following_up:"Following Up", replied_followup:"Replied / Follow Up", booked:"Booked", second_call:"2nd Call", not_interested:"Not Interested", closed:"Closed" };
+
 const FINOVEO_KB = `
 ## About Finoveo (Your Company)
 - **Company:** Finoveo, owned by PFScores Inc. Founder: James Testa (james@pfscores.com). Website: finoveo.com
@@ -84,6 +89,10 @@ CAPABILITIES:
 - EMAIL: You CAN send real emails. When the user asks you to send an email, compose it and include a "send_email" field in your JSON response. The app will send it automatically via Gmail.
 - MEMORY: When James tells you something important about himself, his business, a prospect, or a preference, include it in "save_memory" so you can remember it in future conversations.
 - GOOGLE DRIVE & SHEETS: You can create new Google Sheets and write data to existing ones. When a file is attached (CSV or Drive sheet data), it will appear in the conversation context as a table. Use "create_sheet" to create a new spreadsheet, or "write_to_sheet" to append data to an existing one. Always confirm what was written and how many rows.
+- FINOVEO PIPELINE (CRM): You have live access to the Finoveo outbound lead pipeline. When pipeline data is provided in the conversation context, use it to answer questions about leads, stages, and counts. You can update a lead's status or fields using "update_lead". You can trigger a full FDIC + AI research brief on any bank or credit union using "research_institution". You can find a lead's email using "find_email".
+
+Pipeline stages (in order): not_contacted → request_sent → accepted_dm → following_up → replied_followup → booked → second_call → not_interested → closed
+Lead fields: id, first_name, last_name, full_name, email, title, company, institution_type, state, asset_size, status, persona, linkedin_step, lead_score
 
 RULES:
 - When calendar events are provided in the message, use them to answer scheduling questions accurately.
@@ -106,8 +115,16 @@ RULES:
   "suggested_tasks": [{"title": "task name", "priority": "high|medium|low", "reason": "brief reason why"}],
   "save_memory": ["concise fact to remember, written as a statement"],
   "create_sheet": {"title": "Sheet name", "values": [["Col A", "Col B"], ["row1a", "row1b"]]},
-  "write_to_sheet": {"spreadsheetId": "sheet_id_here", "range": "Sheet1", "values": [["row1a", "row1b"]]}
+  "write_to_sheet": {"spreadsheetId": "sheet_id_here", "range": "Sheet1", "values": [["row1a", "row1b"]]},
+  "update_lead": {"search": "company or person name to find the lead", "updates": {"status": "booked", "notes": "optional note"}},
+  "research_institution": {"name": "FMS Bank"},
+  "find_email": {"first_name": "John", "last_name": "Smith", "company": "Citizens Bank", "domain": "citizensbank.com"}
 }
+
+When pipeline data is in the context, use it to answer questions accurately — counts, specific leads, stage breakdowns.
+When asked to update a lead's status (e.g. "move X to booked"), use update_lead with the company/person name as "search".
+When asked to research a bank or credit union (e.g. "get me the intel on FMS Bank"), use research_institution — this calls FDIC + AI and returns a full pre-call brief.
+When asked to find someone's email, use find_email.
 
 When a file is attached to the conversation, it will appear as tabular data. Use that data to answer questions, extract insights, create tasks, or write it to a Google Sheet if asked.
 When the user says "add these to my [sheet name]" or "create a sheet called [name]", use the attached file data as the values.
@@ -270,6 +287,54 @@ async function fetchCalendarEvents(accessToken, daysAhead = 2) {
 function parseResponse(text) {
   try { const m = text.match(/\{[\s\S]*\}/); if (m) return JSON.parse(m[0].replace(/```json|```/g, "").trim()); } catch {}
   return { message: text };
+}
+
+// ─── Finoveo Outbound Engine API calls ───────────────────────────────
+async function fetchOutboundLeads() {
+  const res = await fetch(`${OUTBOUND_URL}/api/sheets?scriptUrl=${encodeURIComponent(OUTBOUND_SCRIPT_URL)}&action=getLeads&offset=0&limit=500`);
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || "Failed to fetch leads");
+  return (data.data || []).map(l => ({ ...l, lead_score: parseInt(l.lead_score) || 0, linkedin_step: parseInt(l.linkedin_step) || 0 }));
+}
+
+async function updateOutboundLead(id, updates) {
+  const res = await fetch(`${OUTBOUND_URL}/api/sheets`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scriptUrl: OUTBOUND_SCRIPT_URL, action: "updateLead", id, updates }),
+  });
+  return await res.json();
+}
+
+async function researchInstitution(name) {
+  const res = await fetch(`${OUTBOUND_URL}/api/research`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error("research_error");
+  return await res.json();
+}
+
+async function findLeadEmail(first_name, last_name, company, domain) {
+  const res = await fetch(`${OUTBOUND_URL}/api/hunter`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ first_name, last_name, company, domain }),
+  });
+  return await res.json();
+}
+
+function buildPipelineSummary(leads) {
+  const counts = {};
+  leads.forEach(l => { counts[l.status] = (counts[l.status] || 0) + 1; });
+  const lines = Object.entries(PIPELINE_STAGES).map(([k, v]) => `- ${v}: ${counts[k] || 0}`);
+  return `Finoveo Pipeline — ${leads.length} total leads:\n${lines.join("\n")}`;
+}
+
+function findLeadBySearch(leads, query) {
+  const q = query.toLowerCase();
+  return leads.find(l => `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase().includes(q));
 }
 
 // ─── CSV parser ───
@@ -800,8 +865,10 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       // Attach live Google context when relevant
       const calToken = localStorage.getItem("mary-google-token");
       const calExpiry = localStorage.getItem("mary-google-token-expiry");
+      const msgLower = msg.toLowerCase();
+      let extra = "";
+
       if (calToken && calExpiry && Date.now() < parseInt(calExpiry)) {
-        const msgLower = msg.toLowerCase();
         const needsCalendar = ["calendar", "schedule", "meeting", "event", "appointment", "today", "tomorrow", "week"].some((k) => msgLower.includes(k));
         const needsEmail = ["email", "inbox", "gmail", "mail", "message", "unread"].some((k) => msgLower.includes(k));
         try {
@@ -809,14 +876,34 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
             needsCalendar ? fetchCalendarEvents(calToken, 3).catch(() => []) : Promise.resolve([]),
             needsEmail ? fetchGmailEmails(calToken).catch(() => []) : Promise.resolve([]),
           ]);
-          let extra = "";
           if (calEvents.length > 0) extra += `\n\nGoogle Calendar events (next 3 days):\n${JSON.stringify(calEvents, null, 2)}`;
           if (emails.length > 0) extra += `\n\nUnread work emails:\n${JSON.stringify(emails, null, 2)}`;
-          if (extra) {
-            const last = apiMsgs[apiMsgs.length - 1];
-            apiMsgs[apiMsgs.length - 1] = { ...last, content: last.content + extra };
+        } catch {}
+      }
+
+      // ─── Finoveo Pipeline pre-fetch ──────────────────────────────────
+      const needsPipeline = ["lead", "pipeline", "prospect", "booked", "contacted", "outbound", "stage", "follow up", "followup", "dm sent", "second call", "not interested", "crm", "deal", "closed", "request sent", "accepted"].some((k) => msgLower.includes(k));
+      if (needsPipeline) {
+        try {
+          const leads = await fetchOutboundLeads();
+          const summary = buildPipelineSummary(leads);
+          // Find specific leads mentioned in the message
+          const words = msg.split(/\s+/).filter(w => w.length > 3);
+          const matching = leads.filter(l => {
+            const hay = `${l.company} ${l.full_name} ${l.first_name} ${l.last_name} ${l.state} ${l.institution_type}`.toLowerCase();
+            return words.some(w => hay.includes(w.toLowerCase()));
+          }).slice(0, 25);
+          extra += `\n\n${summary}`;
+          if (matching.length > 0 && matching.length < leads.length) {
+            const slim = matching.map(l => ({ id: l.id, name: l.full_name || `${l.first_name} ${l.last_name}`, company: l.company, title: l.title, state: l.state, status: l.status, email: l.email, asset_size: l.asset_size, institution_type: l.institution_type }));
+            extra += `\n\nMatching leads:\n${JSON.stringify(slim, null, 2)}`;
           }
         } catch {}
+      }
+
+      if (extra) {
+        const last = apiMsgs[apiMsgs.length - 1];
+        apiMsgs[apiMsgs.length - 1] = { ...last, content: last.content + extra };
       }
 
       const text = await callClaude(apiMsgs);
@@ -894,10 +981,75 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         }
       }
 
+      // ─── Research Institution (FDIC + AI pre-call brief) ────────────
+      let researchNote = "";
+      if (parsed.research_institution?.name) {
+        try {
+          const result = await researchInstitution(parsed.research_institution.name);
+          const inst = result.institution;
+          const ai = result.ai;
+          if (inst || ai) {
+            let brief = `\n\n---\n📊 **${parsed.research_institution.name} — Research Brief**`;
+            if (inst) brief += `\n\n**${inst.name}** · ${inst.type} · ${inst.city}, ${inst.state}\n**Assets:** ${inst.total_assets} · **Deposits:** ${inst.deposits} · **Branches:** ${inst.branches}${inst.website ? ` · [${inst.website}](https://${inst.website})` : ""}`;
+            if (ai?.summary) brief += `\n\n${ai.summary}`;
+            if (ai?.recommended_pitch_angle) brief += `\n\n**Pitch Angle:** ${ai.recommended_pitch_angle}`;
+            if (ai?.likely_priorities?.length) brief += `\n\n**Their Priorities:** ${ai.likely_priorities.join(" · ")}`;
+            if (ai?.likely_concerns?.length) brief += `\n\n**Likely Objections:** ${ai.likely_concerns.join(" · ")}`;
+            if (ai?.discovery_questions?.length) brief += `\n\n**Discovery Questions:**\n${ai.discovery_questions.map(q => `• ${q}`).join("\n")}`;
+            researchNote = brief;
+          }
+        } catch { researchNote = "\n\n⚠️ Research tool couldn't be reached — try again."; }
+      }
+
+      // ─── Update Lead in Pipeline ─────────────────────────────────────
+      let leadNote = "";
+      if (parsed.update_lead) {
+        try {
+          const { search, id, updates } = parsed.update_lead;
+          let targetId = id;
+          let targetName = search;
+          if (!targetId && search) {
+            const leads = await fetchOutboundLeads();
+            const match = findLeadBySearch(leads, search);
+            if (match) { targetId = match.id; targetName = match.company || match.full_name || search; }
+          }
+          if (targetId) {
+            await updateOutboundLead(targetId, updates);
+            const newStatus = updates.status ? ` → **${PIPELINE_STAGES[updates.status] || updates.status}**` : "";
+            leadNote = `\n\n✅ **${targetName}** updated in Finoveo pipeline${newStatus}.`;
+          } else {
+            leadNote = `\n\n⚠️ Couldn't find "${search}" in the pipeline — check the name and try again.`;
+          }
+        } catch { leadNote = "\n\n⚠️ Couldn't update the lead — check the outbound engine connection."; }
+      }
+
+      // ─── Find Email via Hunter ───────────────────────────────────────
+      let emailFindNote = "";
+      if (parsed.find_email) {
+        try {
+          const { first_name, last_name, company, domain } = parsed.find_email;
+          const result = await findLeadEmail(first_name, last_name, company, domain);
+          if (result.success && result.email) {
+            emailFindNote = `\n\n📧 **Email found:** ${result.email} *(${result.confidence}% confidence)*`;
+            // Auto-update the lead in the sheet if we found the email
+            if (first_name && last_name) {
+              const leads = await fetchOutboundLeads().catch(() => []);
+              const match = findLeadBySearch(leads, `${first_name} ${last_name}`);
+              if (match && !match.email) {
+                await updateOutboundLead(match.id, { email: result.email }).catch(() => {});
+                emailFindNote += ` — saved to pipeline.`;
+              }
+            }
+          } else {
+            emailFindNote = `\n\n⚠️ No email found for ${first_name} ${last_name} at ${company || domain}.`;
+          }
+        } catch { emailFindNote = "\n\n⚠️ Email finder unavailable."; }
+      }
+
       // Clear the attached file after sending
       setAttachedFile(null);
 
-      setChat((p) => [...p, { role: "assistant", text: (parsed.message || text) + calNote + emailNote + sheetNote, ts: Date.now() }]);
+      setChat((p) => [...p, { role: "assistant", text: (parsed.message || text) + calNote + emailNote + sheetNote + researchNote + leadNote + emailFindNote, ts: Date.now() }]);
     } catch {
       setChat((p) => [...p, { role: "assistant", text: "Something went wrong. Try again.", ts: Date.now() }]);
     }
