@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
-const GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar.readonly";
+const GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.readonly";
 
 const SYSTEM_PROMPT = `You are Mary, a sharp personal assistant built by Finoveo. You help the user stay organized by managing their calendar, tasks, and email.
 
@@ -46,6 +46,32 @@ async function callClaude(messages) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error?.message || data.error || "API error");
   return (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
+}
+
+async function fetchGmailEmails(accessToken) {
+  const params = new URLSearchParams({
+    q: "is:unread is:inbox -category:promotions -category:updates -category:social newer_than:2d",
+    maxResults: "10",
+  });
+  const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (res.status === 401) throw new Error("token_expired");
+  if (!res.ok) throw new Error("gmail_error");
+  const data = await res.json();
+  const messages = data.messages || [];
+  const details = await Promise.all(
+    messages.slice(0, 5).map(async (m) => {
+      const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const d = await r.json();
+      const headers = d.payload?.headers || [];
+      const get = (name) => headers.find((h) => h.name === name)?.value || "";
+      return { from: get("From"), subject: get("Subject"), date: get("Date"), snippet: d.snippet };
+    })
+  );
+  return details;
 }
 
 async function fetchCalendarEvents(accessToken, daysAhead = 2) {
@@ -209,18 +235,27 @@ export default function Mary() {
     }
     setBriefingLoading(true);
     try {
-      // Fetch real calendar events if Google is connected
+      // Fetch real calendar + Gmail if Google is connected
       let calendarContext = "";
+      let gmailContext = "";
       const token = localStorage.getItem("mary-google-token");
       const tokenExpiry = localStorage.getItem("mary-google-token-expiry");
       if (token && tokenExpiry && Date.now() < parseInt(tokenExpiry)) {
         try {
-          const calEvents = await fetchCalendarEvents(token, 2);
+          const [calEvents, emails] = await Promise.all([
+            fetchCalendarEvents(token, 2).catch(() => []),
+            fetchGmailEmails(token).catch(() => []),
+          ]);
           if (calEvents.length > 0) {
-            calendarContext = `\n\nHere are my Google Calendar events for today and tomorrow:\n${JSON.stringify(calEvents, null, 2)}`;
+            calendarContext = `\n\nGoogle Calendar events for today and tomorrow:\n${JSON.stringify(calEvents, null, 2)}`;
             setEvents(calEvents);
           } else {
             calendarContext = "\n\nGoogle Calendar shows no events for today or tomorrow.";
+          }
+          if (emails.length > 0) {
+            gmailContext = `\n\nUnread work emails from the last 2 days:\n${JSON.stringify(emails, null, 2)}`;
+          } else {
+            gmailContext = "\n\nGmail inbox is clear — no unread work emails.";
           }
         } catch (e) {
           if (e.message === "token_expired") {
@@ -231,9 +266,10 @@ export default function Mary() {
         }
       }
 
-      const briefingMsg = `Give me my daily briefing. ${calendarContext ? "I've provided my calendar events above — summarize them, flag any conflicts or back-to-back meetings." : "I haven't connected Google Calendar yet, so skip the calendar section."} Include a daily Bible verse from the Catholic/Orthodox tradition to start the day with — feel free to draw from the Deuterocanonical books too. Keep it concise.`;
+      const hasGoogle = !!calendarContext;
+      const briefingMsg = `Give me my daily briefing. ${hasGoogle ? "I've provided my calendar events and unread emails above — summarize them. Flag any conflicts, back-to-back meetings, or emails that need action." : "I haven't connected Google yet, so skip the calendar and email sections."} Include a daily Bible verse from the Catholic/Orthodox tradition — feel free to draw from the Deuterocanonical books too. Keep it concise.`;
 
-      const text = await callClaude([{ role: "user", content: briefingMsg + calendarContext }]);
+      const text = await callClaude([{ role: "user", content: briefingMsg + calendarContext + gmailContext }]);
       const p = parseResponse(text);
       setBriefing(p.message || text);
       if (p.calendar_events?.length) setEvents(p.calendar_events);
@@ -368,17 +404,24 @@ export default function Mary() {
       if (pending.length) ctx += "\nPending reminders: " + pending.map((r) => '"' + r.title + '" at ' + r.time).join(", ");
       if (!open.length && !pending.length) ctx += "\nNo open tasks or reminders.";
       apiMsgs[apiMsgs.length - 1].content += ctx;
-      // Attach live calendar context if user asks about schedule
-      const scheduleKeywords = ["calendar", "schedule", "meeting", "event", "appointment", "today", "tomorrow", "week"];
-      const needsCalendar = scheduleKeywords.some((k) => msg.toLowerCase().includes(k));
+      // Attach live Google context when relevant
       const calToken = localStorage.getItem("mary-google-token");
       const calExpiry = localStorage.getItem("mary-google-token-expiry");
-      if (needsCalendar && calToken && calExpiry && Date.now() < parseInt(calExpiry)) {
+      if (calToken && calExpiry && Date.now() < parseInt(calExpiry)) {
+        const msgLower = msg.toLowerCase();
+        const needsCalendar = ["calendar", "schedule", "meeting", "event", "appointment", "today", "tomorrow", "week"].some((k) => msgLower.includes(k));
+        const needsEmail = ["email", "inbox", "gmail", "mail", "message", "unread"].some((k) => msgLower.includes(k));
         try {
-          const calEvents = await fetchCalendarEvents(calToken, 3);
-          if (calEvents.length > 0) {
+          const [calEvents, emails] = await Promise.all([
+            needsCalendar ? fetchCalendarEvents(calToken, 3).catch(() => []) : Promise.resolve([]),
+            needsEmail ? fetchGmailEmails(calToken).catch(() => []) : Promise.resolve([]),
+          ]);
+          let extra = "";
+          if (calEvents.length > 0) extra += `\n\nGoogle Calendar events (next 3 days):\n${JSON.stringify(calEvents, null, 2)}`;
+          if (emails.length > 0) extra += `\n\nUnread work emails:\n${JSON.stringify(emails, null, 2)}`;
+          if (extra) {
             const last = apiMsgs[apiMsgs.length - 1];
-            apiMsgs[apiMsgs.length - 1] = { ...last, content: last.content + `\n\nHere are my Google Calendar events for the next 3 days:\n${JSON.stringify(calEvents, null, 2)}` };
+            apiMsgs[apiMsgs.length - 1] = { ...last, content: last.content + extra };
           }
         } catch {}
       }
