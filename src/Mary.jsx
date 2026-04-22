@@ -26,10 +26,12 @@ RULES:
   "tasks_to_complete": ["task title to mark done"],
   "calendar_events": [{"title": "event name", "start": "ISO datetime", "end": "ISO datetime", "location": "optional"}],
   "reminders": [{"title": "reminder text", "time": "ISO datetime string for when to fire the notification"}],
-  "bible_verse": {"text": "The verse text", "reference": "Book Chapter:Verse"}
+  "bible_verse": {"text": "The verse text", "reference": "Book Chapter:Verse"},
+  "send_email": {"to": "recipient@email.com", "subject": "Email subject", "body": "Full email body text"}
 }
 
 Only include fields that are relevant. "message" is always required. Others are optional.
+When the user asks you to send an email, compose it and include a "send_email" field with the to, subject, and body. The system will send it automatically — confirm in your message that you're sending it.
 When the daily briefing is requested, ALWAYS include a "bible_verse" field with an inspiring verse for the day. Choose a different verse each day — draw from the full Catholic and Orthodox biblical canon, including the Deuterocanonical books (Sirach, Wisdom, Tobit, Judith, Baruch, 1 & 2 Maccabees). Vary across the Psalms, Proverbs, Gospels, Epistles, Old Testament prophets, and Deuterocanonical wisdom literature. Stay faithful to Catholic and Orthodox tradition. The user's faith is deeply important to them.
 When calendar events are provided, include the relevant ones in calendar_events in your response.
 When the user asks you to remind them at a specific time, include a "reminders" entry with the exact ISO datetime.
@@ -46,6 +48,19 @@ async function callClaude(messages) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error?.message || data.error || "API error");
   return (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
+}
+
+async function sendGmailEmail(accessToken, { to, subject, body }) {
+  const email = [`To: ${to}`, `Subject: ${subject}`, `Content-Type: text/plain; charset="UTF-8"`, ``, body].join("\n");
+  const encoded = btoa(unescape(encodeURIComponent(email))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ raw: encoded }),
+  });
+  if (res.status === 401) throw new Error("token_expired");
+  if (!res.ok) throw new Error("gmail_send_error");
+  return await res.json();
 }
 
 async function fetchGmailEmails(accessToken) {
@@ -433,7 +448,24 @@ export default function Mary() {
       if (parsed.calendar_events?.length) setEvents(parsed.calendar_events);
       if (parsed.reminders) parsed.reminders.forEach((r) => addReminder(r.title, r.time));
       if (parsed.bible_verse) setVerse(parsed.bible_verse);
-      const emailNote = parsed.email_action ? "\n\n📧 " + (parsed.email_action.type === "sent" ? "Email sent" : parsed.email_action.type === "drafted" ? "Draft saved" : "Search complete") + ": " + (parsed.email_action.summary || "") : "";
+
+      // Actually send the email if Mary composed one
+      let emailNote = "";
+      if (parsed.send_email) {
+        const sendToken = localStorage.getItem("mary-google-token");
+        const sendExpiry = localStorage.getItem("mary-google-token-expiry");
+        if (sendToken && sendExpiry && Date.now() < parseInt(sendExpiry)) {
+          try {
+            await sendGmailEmail(sendToken, parsed.send_email);
+            emailNote = `\n\n📧 Email sent to ${parsed.send_email.to}`;
+          } catch {
+            emailNote = "\n\n⚠️ Couldn't send the email — check your Google connection.";
+          }
+        } else {
+          emailNote = "\n\n⚠️ Google not connected — couldn't send the email.";
+        }
+      }
+
       setChat((p) => [...p, { role: "assistant", text: (parsed.message || text) + emailNote, ts: Date.now() }]);
     } catch {
       setChat((p) => [...p, { role: "assistant", text: "Something went wrong. Try again.", ts: Date.now() }]);
