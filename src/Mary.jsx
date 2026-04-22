@@ -477,6 +477,7 @@ export default function Mary() {
         <div style={S.poweredBy}>
           <div style={S.liveDot} />
           <span>powered by <span style={{ color: "#00f5c0", fontWeight: 600 }}>finoveo</span></span>
+          {googleToken && <span style={{marginLeft:"auto",fontSize:10,color:"#7a96bc",cursor:"pointer"}} onClick={disconnectGoogle}>✓ Google · disconnect</span>}
         </div>
       </header>
 
@@ -498,7 +499,7 @@ export default function Mary() {
         {/* ── TODAY ── */}
         {tab === "today" && (
           <div style={S.anim}>
-            {/* Google Calendar connection banner */}
+            {/* Google Calendar connection banner - only show when not connected */}
             {GOOGLE_CLIENT_ID && !googleToken && (
               <div style={S.gcBanner}>
                 <div style={{flex:1}}>
@@ -506,12 +507,6 @@ export default function Mary() {
                   <div style={{fontSize:12,color:"#7a96bc"}}>See your real schedule in the daily briefing</div>
                 </div>
                 <button onClick={connectGoogle} disabled={googleLoading} style={S.gcBtn}>{googleLoading ? "..." : "Connect"}</button>
-              </div>
-            )}
-            {googleToken && (
-              <div style={{...S.gcBanner, background:"rgba(0,219,168,0.06)", borderColor:"rgba(0,219,168,0.2)"}}>
-                <div style={{flex:1,fontSize:12,color:"#00dba8",fontWeight:500}}>✓ Google Calendar connected</div>
-                <button onClick={disconnectGoogle} style={{...S.gcBtn, background:"rgba(255,255,255,0.04)", color:"#7a96bc", border:"1px solid rgba(255,255,255,0.08)"}}>Disconnect</button>
               </div>
             )}
             <div style={S.card}>
