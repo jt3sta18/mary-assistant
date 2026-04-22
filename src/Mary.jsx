@@ -296,15 +296,16 @@ function parseResponse(text) {
 }
 
 // ─── Finoveo Outbound Engine API calls ───────────────────────────────
-async function fetchOutboundLeads() {
-  const res = await fetch(`${OUTBOUND_URL}/api/sheets?scriptUrl=${encodeURIComponent(OUTBOUND_SCRIPT_URL)}&action=getLeads&offset=0&limit=500`);
+async function fetchOutboundLeads(limit = 2000) {
+  // Use local proxy to avoid CORS
+  const res = await fetch(`/api/sheets?scriptUrl=${encodeURIComponent(OUTBOUND_SCRIPT_URL)}&action=getLeads&offset=0&limit=${limit}`);
   const data = await res.json();
   if (!data.success) throw new Error(data.error || "Failed to fetch leads");
   return (data.data || []).map(l => ({ ...l, lead_score: parseInt(l.lead_score) || 0, linkedin_step: parseInt(l.linkedin_step) || 0 }));
 }
 
 async function updateOutboundLead(id, updates) {
-  const res = await fetch(`${OUTBOUND_URL}/api/sheets`, {
+  const res = await fetch(`/api/sheets`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ scriptUrl: OUTBOUND_SCRIPT_URL, action: "updateLead", id, updates }),
@@ -326,7 +327,7 @@ async function researchInstitution(name) {
 }
 
 async function findLeadEmail(first_name, last_name, company, domain) {
-  const res = await fetch(`${OUTBOUND_URL}/api/hunter`, {
+  const res = await fetch(`/api/hunter`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ first_name, last_name, company, domain }),
@@ -347,7 +348,7 @@ function findLeadBySearch(leads, query) {
 }
 
 async function addOutboundLead(lead) {
-  const res = await fetch(`${OUTBOUND_URL}/api/sheets`, {
+  const res = await fetch(`/api/sheets`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ scriptUrl: OUTBOUND_SCRIPT_URL, action: "addLead", lead }),
@@ -1140,7 +1141,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
           const lead = findLeadBySearch(leads, parsed.generate_linkedin.search);
           if (lead) {
             const prompt = buildLinkedInPrompt(lead);
-            const res = await fetch(`${OUTBOUND_URL}/api/generate`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({prompt}) });
+            const res = await fetch(`/api/generate`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({prompt}) });
             const data = await res.json();
             if (data.success && data.data) {
               const d = data.data;
