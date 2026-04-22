@@ -1140,6 +1140,59 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
     return pipelineCacheRef.current?.leads || await fetchOutboundLeads();
   };
 
+  // ─── Local pipeline lookup — zero API cost, pure JS like the dashboard ──
+  const localPipelineLookup = async (msg) => {
+    const leads = pipelineCacheRef.current?.leads;
+    if (!leads?.length) return null;
+    const msgL = msg.toLowerCase();
+    const STAGE_LABELS = { not_contacted:"Not Contacted", request_sent:"Request Sent", accepted_dm:"Accepted / DM Sent", following_up:"Following Up", replied_followup:"Replied / Follow Up", booked:"Booked", second_call:"2nd Call", not_interested:"Not Interested", closed:"Closed" };
+    const fmtLead = l => `**${l.full_name || `${l.first_name} ${l.last_name}`.trim()}** — ${l.company}${l.title ? `, ${l.title}` : ""}${l.state ? ` (${l.state})` : ""} · Status: ${STAGE_LABELS[l.status] || l.status}${l.next_linkedin_followup_date ? ` · Follow-up: ${l.next_linkedin_followup_date}` : ""}`;
+
+    // ── Name/company lookup ──────────────────────────────────────────────
+    const namePat = /\b(where is|what stage is|status of|find|look up|show me|tell me about|update on|check on|how is|pull up)\b/i;
+    const properName = /\b[A-Z][a-z]+\s+[A-Z][a-z]+\b/.exec(msg);
+    if (namePat.test(msg) || properName) {
+      const words = msg.split(/\s+/).filter(w => w.length > 2);
+      const matches = leads.filter(l => {
+        const hay = `${l.full_name} ${l.first_name} ${l.last_name} ${l.company}`.toLowerCase();
+        return words.some(w => w.length > 3 && hay.includes(w.toLowerCase()));
+      }).slice(0, 5);
+      if (matches.length === 1) return fmtLead(matches[0]);
+      if (matches.length > 1) return `Found ${matches.length} matches:\n${matches.map(fmtLead).join("\n")}`;
+    }
+
+    // ── Stage count/list ─────────────────────────────────────────────────
+    const stageMap = { "booked":["booked"], "second call":["second_call"], "2nd call":["second_call"], "not interested":["not_interested"], "closed":["closed"], "following up":["following_up"], "follow up":["following_up"], "request sent":["request_sent"], "accepted":["accepted_dm"], "dm sent":["accepted_dm"], "replied":["replied_followup"], "not contacted":["not_contacted"] };
+    const askedStages = Object.entries(stageMap).filter(([k]) => msgL.includes(k)).flatMap(([,v]) => v);
+    if (askedStages.length > 0) {
+      const filtered = leads.filter(l => askedStages.includes(l.status));
+      const isCount = /how many|count|number of|total/.test(msgL);
+      if (isCount) return `You have **${filtered.length} ${STAGE_LABELS[askedStages[0]] || askedStages[0]}** leads.`;
+      if (filtered.length === 0) return `No leads found in ${askedStages.map(s => STAGE_LABELS[s]).join("/")} right now.`;
+      return `**${STAGE_LABELS[askedStages[0]]} — ${filtered.length} leads:**\n${filtered.map(fmtLead).join("\n")}`;
+    }
+
+    // ── Total counts / summary ───────────────────────────────────────────
+    if (/how many (leads|prospects|contacts|total)|pipeline (count|size|total)|total leads/.test(msgL)) {
+      const active = leads.filter(l => l.status && l.status !== "not_contacted");
+      const counts = Object.entries(STAGE_LABELS).map(([k, label]) => {
+        const n = leads.filter(l => l.status === k).length;
+        return n > 0 ? `${label}: ${n}` : null;
+      }).filter(Boolean);
+      return `**Pipeline summary (${leads.length} total leads):**\n${counts.join("\n")}`;
+    }
+
+    // ── Due today ────────────────────────────────────────────────────────
+    if (/due today|follow.?up today|overdue/.test(msgL)) {
+      const today = new Date().toISOString().split("T")[0];
+      const due = leads.filter(l => l.next_linkedin_followup_date && l.next_linkedin_followup_date <= today && l.status !== "not_contacted");
+      if (due.length === 0) return "No follow-ups due today. 👍";
+      return `**${due.length} follow-up${due.length > 1 ? "s" : ""} due today:**\n${due.map(fmtLead).join("\n")}`;
+    }
+
+    return null; // couldn't handle locally — fall through to Claude
+  };
+
   const sendMessage = async (overrideText) => {
     const msg = (typeof overrideText === "string" ? overrideText : input).trim();
     if (!msg || loading) return;
@@ -1148,6 +1201,15 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
     setInput("");
     setLoading(true);
     try {
+      // ── Try a free local lookup before hitting the API ──────────────────
+      if (!attachedFile) {
+        const localAnswer = await localPipelineLookup(msg);
+        if (localAnswer) {
+          setChat((p) => [...p, { role: "assistant", text: localAnswer, ts: Date.now() }]);
+          setLoading(false);
+          return;
+        }
+      }
       const apiMsgs = updated.slice(-6).map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.text }));
       const open = tasks.filter((t) => !t.done);
       const pending = reminders.filter((r) => !r.fired);
