@@ -348,79 +348,36 @@ function parseResponse(text) {
 }
 
 // ─── Finoveo Outbound Engine API calls ───────────────────────────────
-
-// Extract a Google Spreadsheet ID from a full URL or a bare ID string
-function extractSheetId(urlOrId) {
-  if (!urlOrId) return null;
-  const match = urlOrId.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  if (match) return match[1];
-  if (/^[a-zA-Z0-9-_]{20,}$/.test(urlOrId.trim())) return urlOrId.trim();
-  return null;
-}
-
-// Read ALL leads directly from the Google Sheet using the Sheets API.
-// Requires: stored spreadsheet ID (mary-finoveo-sheet-id) + valid OAuth token.
-// Returns every row with every field — notes, lead_score, persona, next_followup_date, etc.
-async function fetchLeadsFromSheetDirect(token, sheetId) {
-  // ── Discover tab name (cached) ──────────────────────────────────────
-  let tabName = localStorage.getItem("mary-finoveo-tab") || "";
-  if (!tabName) {
-    const mr = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties.title`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!mr.ok) throw new Error("sheet_meta_error");
-    const md = await mr.json();
-    tabName = md.sheets?.[0]?.properties?.title || "Sheet1";
-    localStorage.setItem("mary-finoveo-tab", tabName);
-  }
-
-  // ── Read all rows (headers + data) in one API call ──────────────────
-  const range = encodeURIComponent(`${tabName}!A:AZ`);
-  const sr = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  if (sr.status === 401) throw new Error("token_expired");
-  if (!sr.ok) throw new Error("sheets_read_error");
-  const sd = await sr.json();
-  const rows = sd.values || [];
-  if (rows.length < 2) return [];
-
-  const headers = rows[0].map(h =>
-    String(h).toLowerCase().trim().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")
-  );
-  return rows.slice(1).map((row, i) => {
-    const lead = { _row: i + 2 };
-    headers.forEach((h, j) => { if (h) lead[h] = row[j] !== undefined ? row[j] : ""; });
-    lead.lead_score    = parseInt(lead.lead_score)    || 0;
-    lead.linkedin_step = parseInt(lead.linkedin_step) || 0;
-    return lead;
-  }).filter(l => l.id);
-}
+// Fetches ALL leads by calling the Apps Script directly from the browser
+// in parallel pages — no Vercel timeout, no setup required, always live.
+const PIPELINE_PAGE_SIZE = 2000;
+const PIPELINE_MAX = 14000; // ceiling above current 11,890
 
 async function fetchOutboundLeads() {
   const normalize = l => ({ ...l, lead_score: parseInt(l.lead_score) || 0, linkedin_step: parseInt(l.linkedin_step) || 0 });
 
-  // Primary: direct Google Sheets API read — all rows, all fields, always live
-  const token = localStorage.getItem("mary-google-token");
-  const sheetId = localStorage.getItem("mary-finoveo-sheet-id");
-  if (token && sheetId) {
-    try {
-      return await fetchLeadsFromSheetDirect(token, sheetId);
-    } catch (e) {
-      console.warn("Direct sheet read failed:", e.message);
-      if (e.message === "token_expired") {
-        localStorage.removeItem("mary-google-token");
-        localStorage.removeItem("mary-google-token-expiry");
-      }
-      if (e.message === "sheets_read_error" || e.message === "sheet_meta_error") {
-        localStorage.removeItem("mary-finoveo-tab"); // force tab re-discover next time
-      }
-    }
-  }
+  // Build all page offsets upfront
+  const offsets = [];
+  for (let o = 0; o < PIPELINE_MAX; o += PIPELINE_PAGE_SIZE) offsets.push(o);
 
-  // Fallback: sampled pipeline proxy (limited — used when sheet not configured or token missing)
+  try {
+    const pages = await Promise.all(
+      offsets.map(offset =>
+        fetch(`${OUTBOUND_SCRIPT_URL}?action=getLeads&offset=${offset}&limit=${PIPELINE_PAGE_SIZE}`)
+          .then(r => r.json())
+          .catch(() => ({ data: [], total: 0 }))
+      )
+    );
+
+    let allLeads = [];
+    for (const page of pages) {
+      if (!page.data?.length) break; // past the end of the sheet
+      allLeads = allLeads.concat(page.data);
+    }
+    if (allLeads.length > 0) return allLeads.map(normalize);
+  } catch {}
+
+  // Fallback: Vercel proxy (used if Apps Script CORS blocks the direct call)
   try {
     const res = await fetch("/api/pipeline");
     if (res.ok) {
@@ -429,7 +386,7 @@ async function fetchOutboundLeads() {
     }
   } catch {}
 
-  // Last resort: single-page proxy
+  // Last resort: single proxy page
   const res = await fetch(`/api/sheets?scriptUrl=${encodeURIComponent(OUTBOUND_SCRIPT_URL)}&action=getLeads&offset=0&limit=2000`);
   const data = await res.json();
   if (!data.success) throw new Error(data.error || "Failed to fetch leads");
@@ -707,9 +664,6 @@ export default function Mary() {
   const [showDrivePicker, setShowDrivePicker] = useState(false);
   const [driveLoading, setDriveLoading] = useState(false);
   const [googleTokenExpiring, setGoogleTokenExpiring] = useState(false);
-  const [finoveoSheetId, setFinoveoSheetId] = useState(() => localStorage.getItem("mary-finoveo-sheet-id") || "");
-  const [sheetUrlInput, setSheetUrlInput] = useState("");
-  const [sheetInputOpen, setSheetInputOpen] = useState(false);
   const tokenClientRef = useRef(null);
   const recognitionRef = useRef(null);
   const sendMessageRef = useRef(null);
@@ -1541,47 +1495,6 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               </div>
             )}
 
-            {/* Finoveo Sheet setup — shown when Google is connected but sheet not configured */}
-            {googleToken && !finoveoSheetId && (
-              <div style={{...S.gcBanner, background:"rgba(0,219,168,0.08)", border:"1px solid rgba(0,245,192,0.2)"}}>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:600,color:"#00f5c0",marginBottom:2}}>📊 Connect Finoveo Sheet</div>
-                  <div style={{fontSize:12,color:"#7a96bc"}}>Paste your Google Sheet URL so Mary can read all your leads accurately</div>
-                  {sheetInputOpen && (
-                    <div style={{display:"flex",gap:6,marginTop:8}}>
-                      <input
-                        value={sheetUrlInput}
-                        onChange={e => setSheetUrlInput(e.target.value)}
-                        placeholder="https://docs.google.com/spreadsheets/d/..."
-                        style={{flex:1,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(0,245,192,0.25)",borderRadius:8,padding:"6px 10px",color:"#fff",fontSize:12,fontFamily:"'Plus Jakarta Sans',sans-serif"}}
-                      />
-                      <button onClick={() => {
-                        const id = extractSheetId(sheetUrlInput);
-                        if (id) {
-                          localStorage.setItem("mary-finoveo-sheet-id", id);
-                          localStorage.removeItem("mary-finoveo-tab");
-                          setFinoveoSheetId(id);
-                          setSheetInputOpen(false);
-                          setSheetUrlInput("");
-                        }
-                      }} style={{...S.gcBtn, background:"rgba(0,245,192,0.15)", color:"#00f5c0", border:"1px solid rgba(0,245,192,0.3)", whiteSpace:"nowrap"}}>Save</button>
-                    </div>
-                  )}
-                </div>
-                {!sheetInputOpen && (
-                  <button onClick={() => setSheetInputOpen(true)} style={{...S.gcBtn, background:"rgba(0,245,192,0.12)", color:"#00f5c0", border:"1px solid rgba(0,245,192,0.25)"}}>Set URL</button>
-                )}
-              </div>
-            )}
-
-            {/* Sheet connected indicator + reset option */}
-            {googleToken && finoveoSheetId && (
-              <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",marginBottom:8,background:"rgba(0,219,168,0.06)",borderRadius:10,border:"1px solid rgba(0,245,192,0.1)"}}>
-                <div style={{width:6,height:6,borderRadius:"50%",background:"#00f5c0",boxShadow:"0 0 6px #00f5c0",flexShrink:0}} />
-                <span style={{fontSize:11,color:"rgba(255,255,255,0.5)",flex:1}}>Finoveo Sheet connected — live data</span>
-                <button onClick={() => { localStorage.removeItem("mary-finoveo-sheet-id"); localStorage.removeItem("mary-finoveo-tab"); setFinoveoSheetId(""); }} style={{background:"none",border:"none",color:"#7a96bc",fontSize:10,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Change</button>
-              </div>
-            )}
             <div style={S.card}>
               <div style={S.cHead}><div style={S.headDot} /><span style={S.cTitle}>Daily Briefing</span><button onClick={() => fetchBriefing(true)} style={S.refreshBtn} disabled={briefingLoading}>{briefingLoading ? "↻" : "↻ Refresh"}</button></div>
               {briefingLoading
