@@ -3,7 +3,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send";
 
-const SYSTEM_PROMPT = `You are Mary, a sharp personal assistant built by Finoveo. You help the user stay organized by managing their calendar, tasks, and email.
+const getUserName = () => localStorage.getItem("mary-user-name") || "";
+
+const SYSTEM_PROMPT = `You are Mary, a sharp personal assistant built by Finoveo. You help ${getUserName() ? getUserName() : "the user"} stay organized by managing their calendar, tasks, and email.${getUserName() ? ` Address them as ${getUserName()} occasionally — keep it natural, not every message.` : ""}
 
 Calendar events from Google Calendar will be provided directly in the conversation context when available. Use them to answer scheduling questions.
 
@@ -29,12 +31,14 @@ RULES:
   "reminders": [{"title": "reminder text", "time": "ISO datetime string for when to fire the notification"}],
   "bible_verse": {"text": "The verse text", "reference": "Book Chapter:Verse"},
   "send_email": {"to": "recipient@email.com", "subject": "Email subject", "body": "Full email body text"},
-  "create_events": [{"title": "event name", "start": "ISO datetime", "end": "ISO datetime", "location": "optional"}]
+  "create_events": [{"title": "event name", "start": "ISO datetime", "end": "ISO datetime", "location": "optional"}],
+  "suggested_tasks": [{"title": "task name", "priority": "high|medium|low", "reason": "brief reason why"}]
 }
 
 Only include fields that are relevant. "message" is always required. Others are optional.
 When the user asks you to send an email, compose it and include a "send_email" field — the system sends it automatically via Gmail.
 When the user asks you to create or schedule a calendar event, include it in "create_events" — the system will add it to Google Calendar automatically. Always confirm what you scheduled in your message.
+When emails are provided in the briefing, scan them for action items and include up to 3 proactive task suggestions in "suggested_tasks" — things the user probably needs to do based on the emails.
 When the daily briefing is requested, ALWAYS include a "bible_verse" field with an inspiring verse for the day. Choose a different verse each day — draw from the full Catholic and Orthodox biblical canon, including the Deuterocanonical books (Sirach, Wisdom, Tobit, Judith, Baruch, 1 & 2 Maccabees). Vary across the Psalms, Proverbs, Gospels, Epistles, Old Testament prophets, and Deuterocanonical wisdom literature. Stay faithful to Catholic and Orthodox tradition. The user's faith is deeply important to them.
 When calendar events are provided, include the relevant ones in calendar_events in your response.
 When the user asks you to remind them at a specific time, include a "reminders" entry with the exact ISO datetime.
@@ -66,6 +70,27 @@ async function sendGmailEmail(accessToken, { to, subject, body }) {
   return await res.json();
 }
 
+async function fetchGoogleProfile(accessToken) {
+  try {
+    const res = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch { return null; }
+}
+
+async function replyToGmail(accessToken, { threadId, messageId, to, subject, body }) {
+  const replySubject = subject.startsWith("Re:") ? subject : `Re: ${subject}`;
+  const email = [`To: ${to}`, `Subject: ${replySubject}`, `In-Reply-To: ${messageId}`, `References: ${messageId}`, `Content-Type: text/plain; charset="UTF-8"`, ``, body].join("\n");
+  const encoded = btoa(unescape(encodeURIComponent(email))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ raw: encoded, threadId }),
+  });
+  if (!res.ok) throw new Error("reply_error");
+  return await res.json();
+}
+
 async function fetchGmailEmails(accessToken) {
   const params = new URLSearchParams({
     q: "is:unread is:inbox -category:promotions -category:updates -category:social newer_than:2d",
@@ -79,14 +104,14 @@ async function fetchGmailEmails(accessToken) {
   const data = await res.json();
   const messages = data.messages || [];
   const details = await Promise.all(
-    messages.slice(0, 5).map(async (m) => {
-      const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`, {
+    messages.slice(0, 8).map(async (m) => {
+      const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=Message-ID`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       const d = await r.json();
       const headers = d.payload?.headers || [];
       const get = (name) => headers.find((h) => h.name === name)?.value || "";
-      return { from: get("From"), subject: get("Subject"), date: get("Date"), snippet: d.snippet };
+      return { id: m.id, threadId: d.threadId, messageId: get("Message-ID"), from: get("From"), subject: get("Subject"), date: get("Date"), snippet: d.snippet };
     })
   );
   return details;
@@ -188,7 +213,15 @@ export default function Mary() {
   const [fired, setFired] = useState(new Set());
   const [googleToken, setGoogleToken] = useState(null);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [inboxEmails, setInboxEmails] = useState([]);
+  const [isListening, setIsListening] = useState(false);
+  const [suggestedTasks, setSuggestedTasks] = useState([]);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyText, setReplyText] = useState("");
+  const [replySending, setReplySending] = useState(false);
   const tokenClientRef = useRef(null);
+  const recognitionRef = useRef(null);
   const chatEnd = useRef(null);
   const inputRef = useRef(null);
 
@@ -197,6 +230,7 @@ export default function Mary() {
       setTasks(await loadData("mary-tasks", []));
       setChat(await loadData("mary-chat", []));
       setReminders(await loadData("mary-reminders", []));
+      setSuggestedTasks(await loadData("mary-suggested-tasks", []));
       // Load cached briefing if from today
       const cached = await loadData("mary-briefing-cache", null);
       if (cached && cached.date === new Date().toDateString()) {
@@ -213,11 +247,14 @@ export default function Mary() {
     })();
     if ("Notification" in window) setNotifPerm(Notification.permission);
 
-    // Load stored Google token
+    // Load stored Google token + profile
     const storedToken = localStorage.getItem("mary-google-token");
     const tokenExpiry = localStorage.getItem("mary-google-token-expiry");
+    const storedName = localStorage.getItem("mary-user-name");
+    if (storedName) setUserName(storedName);
     if (storedToken && tokenExpiry && Date.now() < parseInt(tokenExpiry)) {
       setGoogleToken(storedToken);
+      fetchGmailEmails(storedToken).then(setInboxEmails).catch(() => {});
     } else {
       localStorage.removeItem("mary-google-token");
       localStorage.removeItem("mary-google-token-expiry");
@@ -233,19 +270,42 @@ export default function Mary() {
       tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: GOOGLE_SCOPES,
-        callback: (response) => {
+        callback: async (response) => {
           if (response.error) return;
           const expiry = Date.now() + response.expires_in * 1000;
           setGoogleToken(response.access_token);
           localStorage.setItem("mary-google-token", response.access_token);
           localStorage.setItem("mary-google-token-expiry", expiry.toString());
           setGoogleLoading(false);
+          // Fetch profile and inbox on connect
+          const profile = await fetchGoogleProfile(response.access_token);
+          if (profile?.given_name) {
+            setUserName(profile.given_name);
+            localStorage.setItem("mary-user-name", profile.given_name);
+          }
+          fetchGmailEmails(response.access_token).then(setInboxEmails).catch(() => {});
         },
       });
     };
     document.head.appendChild(script);
     return () => { if (script.parentNode) script.parentNode.removeChild(script); };
   }, []);
+
+  const startListening = useCallback(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    if (isListening) { recognitionRef.current?.stop(); return; }
+    const r = new SR();
+    r.continuous = false;
+    r.interimResults = false;
+    r.lang = "en-US";
+    r.onstart = () => setIsListening(true);
+    r.onresult = (e) => { setInput(e.results[0][0].transcript); setIsListening(false); };
+    r.onerror = () => setIsListening(false);
+    r.onend = () => setIsListening(false);
+    recognitionRef.current = r;
+    r.start();
+  }, [isListening]);
 
   const connectGoogle = useCallback(() => {
     if (!tokenClientRef.current) return;
@@ -309,6 +369,7 @@ export default function Mary() {
       setBriefing(p.message || text);
       if (p.calendar_events?.length) setEvents(p.calendar_events);
       if (p.bible_verse) setVerse(p.bible_verse);
+      if (p.suggested_tasks?.length) await saveData("mary-suggested-tasks", p.suggested_tasks);
       await saveData("mary-briefing-cache", { date: new Date().toDateString(), ts: Date.now(), briefing: p.message || text, events: p.calendar_events || [], verse: p.bible_verse || null });
     } catch (e) {
       setBriefing("Couldn't fetch your briefing — try refreshing. " + (e.message || ""));
@@ -361,7 +422,10 @@ export default function Mary() {
 
       // 7:00 AM morning nudge
       if (h === 7 && m === 0 && !fired.has("morning-" + todayKey)) {
-        fireNotification("☀ Good morning", "Your daily briefing is ready in Mary.");
+        const name = localStorage.getItem("mary-user-name") || "";
+        const firstEvent = events[0];
+        const notifBody = firstEvent ? `First up: ${firstEvent.title} at ${formatTime(firstEvent.start)}` : "Your daily briefing is ready.";
+        fireNotification(`☀ Good morning${name ? ", " + name : ""}!`, notifBody);
         setFired((p) => new Set([...p, "morning-" + todayKey]));
       }
 
@@ -510,7 +574,8 @@ export default function Mary() {
   };
 
   const now = new Date();
-  const greet = now.getHours() < 12 ? "Good morning" : now.getHours() < 17 ? "Good afternoon" : "Good evening";
+  const greetBase = now.getHours() < 12 ? "Good morning" : now.getHours() < 17 ? "Good afternoon" : "Good evening";
+  const greet = userName ? `${greetBase}, ${userName}` : greetBase;
   const dateStr = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   const openTasks = tasks.filter((t) => !t.done);
   const doneTasks = tasks.filter((t) => t.done);
@@ -554,6 +619,7 @@ export default function Mary() {
         {[
           { k: "today", l: "Today" },
           { k: "tasks", l: "Tasks" + (openTasks.length ? " (" + openTasks.length + ")" : "") },
+          { k: "inbox", l: "Inbox" + (inboxEmails.length ? " (" + inboxEmails.length + ")" : "") },
           { k: "reminders", l: "Alerts" + (pending.length ? " (" + pending.length + ")" : "") },
           { k: "chat", l: "Chat" },
         ].map((t) => (
@@ -648,6 +714,24 @@ export default function Mary() {
               </div>
             )}
 
+            {suggestedTasks.length > 0 && (
+              <div style={S.card}>
+                <div style={S.cHead}><div style={{...S.headDot,background:"#a78bfa",boxShadow:"0 0 8px #a78bfa"}} /><span style={S.cTitle}>Suggested Tasks</span><button onClick={async () => { await saveData("mary-suggested-tasks",[]); setSuggestedTasks([]); }} style={S.seeAll}>Clear</button></div>
+                {suggestedTasks.map((t, i) => (
+                  <div key={i} style={{...S.mini, justifyContent:"space-between"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,flex:1}}>
+                      <div style={{...S.pDot,background:PC[t.priority]||PC.medium}}/>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:500}}>{t.title}</div>
+                        {t.reason && <div style={{fontSize:11,color:"#7a96bc"}}>{t.reason}</div>}
+                      </div>
+                    </div>
+                    <button onClick={() => { addTask(t.title, null, t.priority || "medium"); setSuggestedTasks(p => { const n = p.filter((_,idx)=>idx!==i); saveData("mary-suggested-tasks",n); return n; }); }} style={{...S.gcBtn, fontSize:10, padding:"4px 10px"}}>+ Add</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div style={S.qActions}>
               <button onClick={() => setTab("chat")} style={S.qBtn}>Ask Mary</button>
               <button onClick={() => setTab("tasks")} style={S.qBtn2}>+ Add a task</button>
@@ -688,6 +772,54 @@ export default function Mary() {
                 <button onClick={() => setTasks((p) => p.filter((t) => !t.done))} style={S.clrDone}>Clear completed</button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── INBOX ── */}
+        {tab === "inbox" && (
+          <div style={S.anim}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <div style={S.secTitle}>Unread Work Emails</div>
+              <button onClick={() => { const t = localStorage.getItem("mary-google-token"); if (t) fetchGmailEmails(t).then(setInboxEmails).catch(()=>{}); }} style={S.refreshBtn}>↻ Refresh</button>
+            </div>
+            {!googleToken && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>📧</div><div style={{fontSize:16,fontWeight:600}}>Google not connected</div><div style={{fontSize:13,marginTop:4,color:"#7a96bc"}}>Connect Google to see your inbox</div></div>}
+            {googleToken && !inboxEmails.length && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>📭</div><div style={{fontSize:16,fontWeight:600}}>Inbox clear</div><div style={{fontSize:13,marginTop:4,color:"#7a96bc"}}>No unread work emails</div></div>}
+            {inboxEmails.map((email, i) => (
+              <div key={i} style={{...S.card, marginBottom:10}}>
+                <div style={{fontSize:12,color:"#00dba8",fontWeight:600,marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{email.from?.replace(/<.*>/, "").trim()}</div>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>{email.subject}</div>
+                <div style={{fontSize:12,color:"#7a96bc",lineHeight:1.5,marginBottom:10}}>{email.snippet}</div>
+                {replyingTo === i ? (
+                  <div>
+                    <textarea
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      placeholder="Write your reply..."
+                      style={{width:"100%",background:"#071428",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"#fff",fontSize:13,padding:"8px 10px",fontFamily:"'Plus Jakarta Sans',sans-serif",resize:"vertical",minHeight:80,outline:"none",boxSizing:"border-box"}}
+                    />
+                    <div style={{display:"flex",gap:8,marginTop:8}}>
+                      <button disabled={replySending || !replyText.trim()} onClick={async () => {
+                        const t = localStorage.getItem("mary-google-token");
+                        if (!t || !replyText.trim()) return;
+                        setReplySending(true);
+                        try {
+                          await replyToGmail(t, { threadId: email.threadId, messageId: email.messageId, to: email.from, subject: email.subject, body: replyText });
+                          setReplyingTo(null); setReplyText("");
+                          setInboxEmails(p => p.filter((_, idx) => idx !== i));
+                        } catch { alert("Failed to send reply"); }
+                        setReplySending(false);
+                      }} style={{...S.gcBtn, flex:1}}>{replySending ? "Sending..." : "Send Reply"}</button>
+                      <button onClick={() => { setReplyingTo(null); setReplyText(""); }} style={{...S.gcBtn, background:"rgba(255,255,255,0.04)", color:"#7a96bc", border:"1px solid rgba(255,255,255,0.08)"}}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={() => { setReplyingTo(i); setReplyText(""); }} style={{...S.gcBtn, fontSize:11, padding:"5px 12px"}}>↩ Reply</button>
+                    <button onClick={() => { setTab("chat"); setTimeout(() => { setInput(`Draft a reply to ${email.from?.replace(/<.*>/, "").trim()} about: "${email.subject}"`); inputRef.current?.focus(); }, 100); }} style={{...S.gcBtn, fontSize:11, padding:"5px 12px", background:"rgba(56,170,255,0.15)", color:"#38aaff"}}>✦ Ask Mary</button>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
 
@@ -762,7 +894,8 @@ export default function Mary() {
               <div ref={chatEnd} />
             </div>
             <div style={S.chatBar}>
-              <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} placeholder="Ask Mary anything..." style={S.chatIn} />
+              <button onClick={startListening} style={{...S.sendBtn, background: isListening ? "#ef4444" : "rgba(255,255,255,0.06)", color: isListening ? "#fff" : "#7a96bc", boxShadow:"none", fontSize:16}} title="Voice input">🎤</button>
+              <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} placeholder={isListening ? "Listening..." : "Ask Mary anything..."} style={{...S.chatIn, borderColor: isListening ? "rgba(239,68,68,0.4)" : "rgba(255,255,255,0.10)"}} />
               <button onClick={sendMessage} disabled={!input.trim() || loading} style={S.sendBtn}>↑</button>
             </div>
           </div>
