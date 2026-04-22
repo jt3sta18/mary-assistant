@@ -149,8 +149,9 @@ When the user asks you to remind them at a specific time, include a "reminders" 
 If they say something vague like "remind me tomorrow morning", interpret that as 9:00 AM the next day.
 If they say "remind me in 30 minutes", calculate the exact time from now.`;
 
-async function callClaude(messages) {
-  const body = { model: "claude-sonnet-4-20250514", max_tokens: 1500, system: buildSystemPrompt(), messages };
+async function callClaude(messages, useHaiku = false) {
+  const model = useHaiku ? "claude-haiku-4-20250514" : "claude-sonnet-4-20250514";
+  const body = { model, max_tokens: 1500, system: buildSystemPrompt(), messages };
   const res = await fetch("/api/chat", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
@@ -1147,7 +1148,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
     setInput("");
     setLoading(true);
     try {
-      const apiMsgs = updated.slice(-10).map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.text }));
+      const apiMsgs = updated.slice(-6).map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.text }));
       const open = tasks.filter((t) => !t.done);
       const pending = reminders.filter((r) => !r.fired);
       let ctx = "";
@@ -1189,42 +1190,37 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       }
 
       // ─── Finoveo Pipeline pre-fetch ──────────────────────────────────
-      // Broad keyword list + heuristic: if message contains a proper name pattern (First Last) treat it as a lead lookup
-      const pipelineKeywords = ["lead", "pipeline", "prospect", "booked", "contacted", "outbound", "stage", "follow up", "followup", "dm sent", "second call", "not interested", "crm", "deal", "closed", "request sent", "accepted", "find", "look up", "lookup", "where is", "what stage", "status of", "update on", "check on", "how is", "hear from", "reach out", "connect with", "who is", "any update", "progress on", "contact", "reply", "responded", "interested", "pitched", "bank", "credit union", "cu", "institution", "company", "asset"];
+      // Trigger on specific pipeline terms OR a proper name (First Last pattern)
+      const pipelineKeywords = ["lead", "pipeline", "prospect", "booked", "outbound", "stage", "follow up", "followup", "dm sent", "second call", "not interested", "crm", "closed", "request sent", "accepted", "where is", "what stage", "status of", "update on", "check on", "any update", "progress on", "reply", "responded", "pitched", "due today", "overdue"];
       const hasProperName = /\b[A-Z][a-z]{1,}\s+[A-Z][a-z]{1,}\b/.test(msg);
       const needsPipeline = pipelineKeywords.some((k) => msgLower.includes(k)) || hasProperName;
       if (needsPipeline) {
         try {
           const leads = await getLeads();
-          const summary = buildPipelineSummary(leads);
-          extra += `\n\n${summary}`;
+          // Always include summary counts — cheap, always useful
+          extra += `\n\n${buildPipelineSummary(leads)}`;
 
-          // Detect which stages are being asked about
-          const stageMap = { booked:"booked", "second call":"second_call", "2nd call":"second_call", "not interested":"not_interested", closed:"closed", "following up":"following_up", "request sent":"request_sent", "accepted":"accepted_dm", "dm sent":"accepted_dm", "replied":"replied_followup", "follow up":"following_up", "not contacted":"not_contacted" };
-          const askedStatuses = Object.entries(stageMap).filter(([k]) => msgLower.includes(k)).map(([,v]) => v);
+          // Check if user is asking about a specific person or company
+          const words = msg.split(/\s+/).filter(w => w.length > 2);
+          const matching = leads.filter(l => {
+            const hay = `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase();
+            return words.some(w => w.length > 3 && hay.includes(w.toLowerCase()));
+          }).slice(0, 5);
 
-          // Always pass active pipeline leads (non-not_contacted) for stage queries
-          const slimLead = l => ({ id: l.id, name: l.full_name || `${l.first_name} ${l.last_name}`.trim(), company: l.company, title: l.title, state: l.state, status: l.status, email: l.email, asset_size: l.asset_size, institution_type: l.institution_type, persona: l.persona, lead_score: l.lead_score, linkedin_step: l.linkedin_step, next_followup: l.next_linkedin_followup_date, notes: l.notes });
-
-          if (askedStatuses.length > 0) {
-            // Specific stage asked — pass all leads in that stage
-            const stageLeads = leads.filter(l => askedStatuses.includes(l.status));
-            extra += `\n\nLeads in requested stage(s) [${askedStatuses.join(", ")}] — ${stageLeads.length} found:\n${JSON.stringify(stageLeads.map(slimLead), null, 2)}`;
+          if (matching.length > 0) {
+            // Specific person/company — send full detail for matched leads only
+            const slimLead = l => ({ id: l.id, name: l.full_name || `${l.first_name} ${l.last_name}`.trim(), company: l.company, title: l.title, state: l.state, status: l.status, email: l.email, asset_size: l.asset_size, institution_type: l.institution_type, persona: l.persona, linkedin_step: l.linkedin_step, next_followup: l.next_linkedin_followup_date, notes: l.notes });
+            extra += `\n\nMatched lead(s):\n${JSON.stringify(matching.map(slimLead), null, 2)}`;
           } else {
-            // General pipeline query — pass all active (non-not_contacted) leads
-            const activeLeads = leads.filter(l => l.status && l.status !== "not_contacted").slice(0, 50);
-            if (activeLeads.length > 0) {
-              extra += `\n\nActive pipeline leads (${activeLeads.length} shown):\n${JSON.stringify(activeLeads.map(slimLead), null, 2)}`;
+            // Stage or general query — compact one-liner per lead, no heavy JSON
+            const stageMap = { booked:"booked", "second call":"second_call", "2nd call":"second_call", "not interested":"not_interested", closed:"closed", "following up":"following_up", "request sent":"request_sent", "accepted":"accepted_dm", "dm sent":"accepted_dm", "replied":"replied_followup", "follow up":"following_up", "not contacted":"not_contacted" };
+            const askedStatuses = Object.entries(stageMap).filter(([k]) => msgLower.includes(k)).map(([,v]) => v);
+            const compact = l => `${l.full_name || `${l.first_name} ${l.last_name}`.trim()} — ${l.company} (${l.status}${l.next_linkedin_followup_date ? ", due " + l.next_linkedin_followup_date : ""})`;
+            if (askedStatuses.length > 0) {
+              const stageLeads = leads.filter(l => askedStatuses.includes(l.status));
+              extra += `\n\nLeads in ${askedStatuses.join("/")} (${stageLeads.length} total):\n${stageLeads.map(compact).join("\n")}`;
             }
-            // Also pass keyword-matched leads
-            const words = msg.split(/\s+/).filter(w => w.length > 3);
-            const matching = leads.filter(l => {
-              const hay = `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase();
-              return words.some(w => hay.includes(w.toLowerCase()));
-            }).slice(0, 25);
-            if (matching.length > 0) {
-              extra += `\n\nKeyword-matched leads:\n${JSON.stringify(matching.map(slimLead), null, 2)}`;
-            }
+            // General queries get summary only — no individual lead dump
           }
         } catch (e) {
           extra += `\n\n⚠️ Could not load pipeline data: ${e.message}`;
@@ -1244,7 +1240,9 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         apiMsgs[apiMsgs.length - 1] = last;
       }
 
-      const text = await callClaude(apiMsgs);
+      // Use Haiku for simple conversational messages — no heavy context attached
+      const isSimple = !needsPipeline && !attachedFile && !extra;
+      const text = await callClaude(apiMsgs, isSimple);
       const parsed = parseResponse(text);
       if (parsed.tasks_to_add) parsed.tasks_to_add.forEach((t) => addTask(t.title, t.due, t.priority || "medium"));
       if (parsed.tasks_to_complete) setTasks((p) => p.map((t) => parsed.tasks_to_complete.some((tc) => t.title.toLowerCase().includes(tc.toLowerCase())) ? { ...t, done: true } : t));
