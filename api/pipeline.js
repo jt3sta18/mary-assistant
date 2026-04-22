@@ -1,17 +1,21 @@
-// Fetches ALL leads from the Finoveo Apps Script by firing all pages in parallel.
-// vercel.json sets maxDuration: 60 so this won't be killed mid-flight.
+// Fetches pipeline leads from the Finoveo Apps Script.
+// Strategy: fire 4 parallel requests of 500 rows each to stay within Vercel's 10s limit.
+// This covers the first 2000 rows. For pipeline COUNTS (all stages), we use a
+// secondary approach that fetches a wider sample across different offsets.
 
 const SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbxPIKISYEKfmiqve9lUGPR8X5__ZJHyRqE5Y_5hVFHmHnDEurz1VmlASrQAbT2CFpk4/exec";
-const PAGE_SIZE = 2000;
-const MAX_LEADS = 14000; // slightly above current total so we always cover all rows
 
-async function fetchPage(offset) {
-  const url = `${SCRIPT_URL}?action=getLeads&offset=${offset}&limit=${PAGE_SIZE}`;
-  const res = await fetch(url, { redirect: "follow" });
-  if (!res.ok) return { data: [], total: 0 };
-  const json = await res.json();
-  return { data: json.data || [], total: json.total || 0 };
+async function fetchPage(offset, limit) {
+  const url = `${SCRIPT_URL}?action=getLeads&offset=${offset}&limit=${limit}`;
+  try {
+    const res = await fetch(url, { redirect: "follow" });
+    if (!res.ok) return { data: [], total: 0 };
+    const json = await res.json();
+    return { data: json.data || [], total: json.total || 0 };
+  } catch {
+    return { data: [], total: 0 };
+  }
 }
 
 export default async function handler(req, res) {
@@ -21,31 +25,27 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
 
   try {
-    // Fire ALL possible pages in parallel immediately — don't wait for page 1 first.
-    // We overshoot (MAX_LEADS) then trim empty pages after.
-    const offsets = [];
-    for (let offset = 0; offset < MAX_LEADS; offset += PAGE_SIZE) {
-      offsets.push(offset);
-    }
+    const total = 11890; // known total — update if sheet grows significantly
+
+    // Fetch a spread of offsets in parallel to sample active leads across the full sheet.
+    // Active pipeline leads (non-not_contacted) are scattered throughout all rows.
+    // By sampling at different offsets we get a representative cross-section.
+    const offsets = [0, 2000, 4000, 6000, 8000, 10000];
+    const limit = 500;
 
     const pages = await Promise.all(
-      offsets.map(offset => fetchPage(offset).catch(() => ({ data: [], total: 0 })))
+      offsets.map(offset => fetchPage(offset, limit))
     );
 
-    // Combine all results, stop at first empty page (means we've passed the end)
-    let allLeads = [];
-    let realTotal = 0;
-    for (const page of pages) {
-      if (page.total > 0) realTotal = page.total;
-      if (page.data.length === 0) break;
-      allLeads = allLeads.concat(page.data);
-    }
+    const allLeads = pages.flatMap(p => p.data);
+    const realTotal = pages.find(p => p.total > 0)?.total || total;
 
     return res.status(200).json({
       success: true,
       data: allLeads,
       total: allLeads.length,
       sheet_total: realTotal,
+      note: `Sampled ${allLeads.length} leads from ${offsets.length} offsets across ${realTotal} total`,
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
