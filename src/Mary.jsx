@@ -1354,6 +1354,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         try {
           const lead = { ...parsed.add_lead, persona: parsed.add_lead.persona || classifyPersona(parsed.add_lead.title) };
           await addOutboundLead(lead);
+          pipelineCacheRef.current = null;
           addLeadNote = `\n\n✅ **${lead.full_name || `${lead.first_name} ${lead.last_name}`}** added to the Finoveo pipeline as *Not Contacted*.`;
         } catch { addLeadNote = "\n\n⚠️ Couldn't add the lead — check the outbound engine connection."; }
       }
@@ -1372,6 +1373,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               // Small delay to avoid overwhelming the Apps Script
               await new Promise(r => setTimeout(r, 150));
             }
+            if (added > 0) pipelineCacheRef.current = null;
             bulkLeadNote = `\n\n✅ **${added} leads imported** to Finoveo pipeline${failed ? ` (${failed} failed)` : ""}.`;
             if (added > 0) bulkLeadNote += ` All set to *Not Contacted*.`;
           }
@@ -1434,6 +1436,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
           }
           if (targetId) {
             await updateOutboundLead(targetId, updates);
+            pipelineCacheRef.current = null; // invalidate cache — next query gets fresh data
             const newStatus = updates.status ? ` → **${PIPELINE_STAGES[updates.status] || updates.status}**` : "";
             leadNote = `\n\n✅ **${targetName}** updated in Finoveo pipeline${newStatus}.`;
           } else {
