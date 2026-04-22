@@ -544,14 +544,23 @@ async function fetchDriveSheets(accessToken) {
   const params = new URLSearchParams({
     q: "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false",
     orderBy: "modifiedTime desc",
-    pageSize: "20",
+    pageSize: "30",
+    corpora: "user",
     fields: "files(id,name,modifiedTime,webViewLink)",
   });
   const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (res.status === 401) throw new Error("token_expired");
-  if (!res.ok) throw new Error("drive_error");
+  if (res.status === 403) {
+    const body = await res.json().catch(() => ({}));
+    const reason = body?.error?.errors?.[0]?.reason || "forbidden";
+    throw new Error(`drive_403:${reason}`);
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.error?.message || "drive_error");
+  }
   const data = await res.json();
   return data.files || [];
 }
@@ -661,6 +670,7 @@ export default function Mary() {
   // Drive / Sheets state
   const [attachedFile, setAttachedFile] = useState(null); // { name, rows, data: [[...]] }
   const [driveSheets, setDriveSheets] = useState([]);
+  const [driveError, setDriveError] = useState(null); // null | "no_token" | "api_error" | string
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showDrivePicker, setShowDrivePicker] = useState(false);
   const [driveLoading, setDriveLoading] = useState(false);
@@ -851,13 +861,19 @@ export default function Mary() {
   const openDrivePicker = useCallback(async () => {
     setShowAttachMenu(false);
     setShowDrivePicker(true);
+    setDriveError(null);
     const token = localStorage.getItem("mary-google-token");
-    if (!token || driveSheets.length) return; // already loaded
+    if (!token) { setDriveError("no_token"); return; }
+    if (driveSheets.length) return; // already loaded successfully — don't re-fetch
     setDriveLoading(true);
     try {
       const sheets = await fetchDriveSheets(token);
       setDriveSheets(sheets);
-    } catch { setDriveSheets([]); }
+      if (sheets.length === 0) setDriveError("empty");
+    } catch (err) {
+      setDriveSheets([]);
+      setDriveError(err.message || "drive_error");
+    }
     setDriveLoading(false);
   }, [driveSheets]);
 
@@ -879,6 +895,9 @@ export default function Mary() {
   const connectGoogle = useCallback(() => {
     if (!tokenClientRef.current) return;
     setGoogleLoading(true);
+    // Clear cached Drive sheets so picker re-fetches with fresh token
+    setDriveSheets([]);
+    setDriveError(null);
     tokenClientRef.current.requestAccessToken();
   }, []);
 
@@ -1842,10 +1861,44 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                 {[1,2,3,4].map((i) => <div key={i} style={{...S.skel,height:52,borderRadius:12}} />)}
               </div>
             )}
-            {!driveLoading && driveSheets.length === 0 && (
-              <div style={{textAlign:"center",padding:"32px 16px",color:"#7a96bc"}}>
-                <div style={{fontSize:32,marginBottom:8}}>📭</div>
-                <div>No Google Sheets found in your Drive</div>
+            {!driveLoading && driveError && (
+              <div style={{textAlign:"center",padding:"24px 16px",color:"#7a96bc"}}>
+                {driveError === "no_token" ? (
+                  <>
+                    <div style={{fontSize:32,marginBottom:8}}>🔗</div>
+                    <div style={{fontWeight:600,color:"#fff",marginBottom:6}}>Google not connected</div>
+                    <div style={{fontSize:12,marginBottom:16}}>Connect Google to access your Drive sheets</div>
+                    <button onClick={() => { setShowDrivePicker(false); connectGoogle(); }} style={{background:"linear-gradient(90deg,#00f5c0,#38aaff)",border:"none",color:"#071428",fontWeight:700,fontSize:13,padding:"8px 20px",borderRadius:8,cursor:"pointer"}}>Connect Google</button>
+                  </>
+                ) : driveError.startsWith("drive_403") ? (
+                  <>
+                    <div style={{fontSize:32,marginBottom:8}}>🔒</div>
+                    <div style={{fontWeight:600,color:"#fff",marginBottom:6}}>Drive access blocked</div>
+                    <div style={{fontSize:12,marginBottom:8}}>Your token doesn't have Drive permission. Reconnect Google to fix this.</div>
+                    <div style={{fontSize:11,color:"#4a6080",marginBottom:16,fontFamily:"monospace"}}>{driveError}</div>
+                    <button onClick={() => { setShowDrivePicker(false); setDriveSheets([]); setDriveError(null); connectGoogle(); }} style={{background:"linear-gradient(90deg,#00f5c0,#38aaff)",border:"none",color:"#071428",fontWeight:700,fontSize:13,padding:"8px 20px",borderRadius:8,cursor:"pointer"}}>Reconnect Google</button>
+                  </>
+                ) : driveError === "token_expired" ? (
+                  <>
+                    <div style={{fontSize:32,marginBottom:8}}>⏱</div>
+                    <div style={{fontWeight:600,color:"#fff",marginBottom:6}}>Session expired</div>
+                    <div style={{fontSize:12,marginBottom:16}}>Your Google session expired. Reconnect to refresh it.</div>
+                    <button onClick={() => { setShowDrivePicker(false); setDriveSheets([]); setDriveError(null); connectGoogle(); }} style={{background:"linear-gradient(90deg,#00f5c0,#38aaff)",border:"none",color:"#071428",fontWeight:700,fontSize:13,padding:"8px 20px",borderRadius:8,cursor:"pointer"}}>Reconnect Google</button>
+                  </>
+                ) : driveError === "empty" ? (
+                  <>
+                    <div style={{fontSize:32,marginBottom:8}}>📭</div>
+                    <div style={{fontWeight:600,color:"#fff",marginBottom:6}}>No sheets found</div>
+                    <div style={{fontSize:12}}>No Google Sheets in your Drive yet, or they may be in a shared drive.</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{fontSize:32,marginBottom:8}}>⚠️</div>
+                    <div style={{fontWeight:600,color:"#fff",marginBottom:6}}>Couldn't load sheets</div>
+                    <div style={{fontSize:11,color:"#4a6080",marginBottom:16,fontFamily:"monospace"}}>{driveError}</div>
+                    <button onClick={() => { setDriveSheets([]); setDriveError(null); openDrivePicker(); }} style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",color:"#fff",fontWeight:600,fontSize:13,padding:"8px 20px",borderRadius:8,cursor:"pointer"}}>Try Again</button>
+                  </>
+                )}
               </div>
             )}
             {!driveLoading && driveSheets.map((sheet) => (
