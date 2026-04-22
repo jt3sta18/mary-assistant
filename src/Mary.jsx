@@ -1450,15 +1450,8 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
             <div style={S.logo}><span style={gradText}>{`Hi, ${userName || "James"}`}</span></div>
             <div style={S.dateLbl}>{dateStr}</div>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <div style={{textAlign:"right"}}>
-              <div style={S.greet}>{greet}</div>
-              {googleToken && <div style={{fontSize:10,color:"#7a96bc",cursor:"pointer",marginTop:2}} onClick={disconnectGoogle}>✓ Google connected</div>}
-            </div>
-            {userPhoto
-              ? <img src={userPhoto} alt="profile" style={{width:36,height:36,borderRadius:"50%",border:"2px solid rgba(0,245,192,0.3)",objectFit:"cover"}} />
-              : <div style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,#00dba8,#38aaff)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:"#071428"}}>{userName?.[0]||"M"}</div>
-            }
+          <div style={{display:"flex",alignItems:"center"}}>
+            {googleToken && <div style={{fontSize:10,color:"#7a96bc",cursor:"pointer"}} onClick={disconnectGoogle}>✓ Google connected</div>}
           </div>
         </div>
         <div style={S.poweredBy}>
