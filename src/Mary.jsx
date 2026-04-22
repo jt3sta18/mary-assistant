@@ -384,7 +384,18 @@ export default function Mary() {
       }
 
       const hasGoogle = !!calendarContext;
-      const briefingMsg = `Give me my daily briefing. ${hasGoogle ? "I've provided my calendar events and unread emails above — summarize them. Flag any conflicts, back-to-back meetings, or emails that need action." : "I haven't connected Google yet, so skip the calendar and email sections."} Include a daily Bible verse from the Catholic/Orthodox tradition — feel free to draw from the Deuterocanonical books too. Keep it concise.`;
+      const briefingMsg = `Give me my daily briefing. Format it with clear sections and plenty of white space so it's easy to scan on mobile. Use this structure:
+
+**📅 Schedule**
+[${hasGoogle ? "Summarize today's events as short bullet points with times. Flag conflicts or back-to-back meetings." : "No calendar connected."}]
+
+**📧 Inbox**
+[${hasGoogle ? "2-3 bullet points for emails needing action. Skip noise." : "No inbox connected."}]
+
+**✅ Tasks**
+[Mention open task count or say inbox is clear.]
+
+Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet points.`;
 
       const text = await callClaude([{ role: "user", content: briefingMsg + calendarContext + gmailContext }]);
       const p = parseResponse(text);
@@ -639,7 +650,7 @@ export default function Mary() {
       <header style={S.header}>
         <div style={S.headerRow}>
           <div>
-            <div style={S.logo}><span style={gradText}>Mary</span></div>
+            <div style={S.logo}><span style={gradText}>{userName ? `Hi, ${userName}` : "Mary"}</span></div>
             <div style={S.dateLbl}>{dateStr}</div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -677,7 +688,9 @@ export default function Mary() {
             )}
             <div style={S.card}>
               <div style={S.cHead}><div style={S.headDot} /><span style={S.cTitle}>Daily Briefing</span><button onClick={() => fetchBriefing(true)} style={S.refreshBtn} disabled={briefingLoading}>{briefingLoading ? "↻" : "↻ Refresh"}</button></div>
-              {briefingLoading ? <div style={S.skelWrap}><div style={S.skel}/><div style={{...S.skel,width:"80%"}}/><div style={{...S.skel,width:"60%"}}/></div> : <div style={S.bText}>{briefing}</div>}
+              {briefingLoading
+                ? <div style={S.skelWrap}><div style={S.skel}/><div style={{...S.skel,width:"85%"}}/><div style={{...S.skel,width:"60%"}}/><div style={{...S.skel,width:"75%",marginTop:8}}/><div style={{...S.skel,width:"50%"}}/></div>
+                : <MarkdownText text={briefing} style={S.bText} />}
             </div>
 
             {/* Bible Verse */}
@@ -1010,7 +1023,7 @@ const S = {
   seeAll: { background: "none", border: "none", color: "#00f5c0", fontSize: 11, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600 },
   refreshBtn: { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "#7a96bc", fontSize: 10, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, padding: "4px 10px" },
   tomorrowCard: { background: "rgba(26,57,120,0.3)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: 16, padding: 16, marginBottom: 12, border: "1px solid rgba(56,170,255,0.12)", boxShadow: "0 4px 24px rgba(0,0,0,0.2)" },
-  bText: { fontSize: 14, lineHeight: 1.7, color: "rgba(255,255,255,0.7)", fontWeight: 300 },
+  bText: { fontSize: 14, lineHeight: 1.85, color: "rgba(255,255,255,0.75)", fontWeight: 300, letterSpacing: "0.1px" },
   // Bible verse — more ornate
   verseCard: { background: "linear-gradient(135deg, rgba(0,219,168,0.08), rgba(56,170,255,0.05))", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: 20, padding: "24px 20px", marginBottom: 12, border: "1px solid rgba(0,245,192,0.15)", position: "relative", overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.2)" },
   verseMark: { position: "absolute", top: -10, left: 12, fontSize: 80, opacity: 0.05, color: "#00f5c0", lineHeight: 1, fontFamily: "Georgia, serif", pointerEvents: "none" },
