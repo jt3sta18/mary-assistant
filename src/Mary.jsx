@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import * as XLSX from "xlsx";
 
 function MarkdownText({ text, style }) {
   if (!text) return null;
@@ -463,7 +464,7 @@ function buildLinkedInPrompt(lead) {
   const persona = lead.persona || classifyPersona(lead.title);
   const PA = { CEO:"growth, revenue, fintechs", CMO:"segmentation, acquisition, engagement", Digital:"digital CX, behavioral data", Retail:"cross-sell, deposits, visibility", Strategy:"intelligence, monetizing data", Product:"innovation, data-driven", Other:"efficiency, advantage" };
   const FIN = "Finoveo sells a white-label client acquisition & data engine (PFScores) to banks/CUs. Behavioral data, customer insights, cross-sell. 90-day deploy, no core changes, 10x deeper data.";
-  return `Generate LinkedIn outreach messages for Finoveo's founder.\n\nFINOVEO: ${FIN}\n\nLEAD: ${lead.full_name || `${lead.first_name} ${lead.last_name}`}, ${lead.title || "?"} at ${lead.company || "?"} (${lead.institution_type || "?"}, ${lead.state || "?"})\nLinkedIn about: ${lead.linkedin_about || "N/A"}\nPersona focus: ${PA[persona] || PA.Other}\n\nConcise, sharp, professional. Peer tone. No flattery.\n\nReturn ONLY valid JSON:\n{"linkedin_connection_note":"<under 280 chars — specific, no fluff>","linkedin_dm_1":"<3-4 sentences — opens with insight, not a pitch>","linkedin_followup_1":"<2-3 sentences — light nudge>","linkedin_followup_2":"<1-2 sentences — final touch>"}`;
+  return "Generate LinkedIn outreach messages for Finoveo's founder.\n\nFINOVEO: "+FIN+"\n\nLEAD: "+(lead.full_name||lead.first_name+" "+lead.last_name)+", "+(lead.title||"?")+" at "+(lead.company||"?")+" ("+(lead.institution_type||"?")+", "+(lead.state||"?")+")\nLinkedIn about: "+(lead.linkedin_about||"N/A")+"\nPersona: "+(PA[persona]||PA.Other)+"\n\nConcise, sharp, professional. No fake compliments.\n\nReturn ONLY valid JSON:\n{\"linkedin_connection_note\":\"<under 280 chars>\",\"linkedin_dm_1\":\"<3-4 sentences>\",\"linkedin_followup_1\":\"<2-3 sentences>\",\"linkedin_followup_2\":\"<1-2 sentences>\"}";
 }
 
 // ─── Smart CSV → Lead mapper ───────────────────────────────────────────
@@ -801,21 +802,47 @@ export default function Mary() {
     r.start();
   }, [isListening]);
 
-  // Handle file upload (CSV → parsed 2D array)
+  // Handle file upload — CSV, Excel (.xlsx/.xls), or PDF
   const handleFileUpload = useCallback((e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setShowAttachMenu(false);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target.result;
-      const data = parseCSV(text);
-      setAttachedFile({ name: file.name, rows: data.length, data });
-      // Switch to chat so user can send a message about the file
-      setTab("chat");
-      setTimeout(() => inputRef.current?.focus(), 100);
-    };
-    reader.readAsText(file);
+    const ext = file.name.split(".").pop().toLowerCase();
+
+    if (ext === "pdf") {
+      // Read as base64 so Claude can natively understand the PDF
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const base64 = ev.target.result.split(",")[1];
+        setAttachedFile({ name: file.name, type: "pdf", base64 });
+        setTab("chat");
+        setTimeout(() => inputRef.current?.focus(), 100);
+      };
+      reader.readAsDataURL(file);
+    } else if (ext === "xlsx" || ext === "xls") {
+      // Parse Excel with SheetJS → same 2D array format as CSV
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const workbook = XLSX.read(ev.target.result, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+        setAttachedFile({ name: file.name, type: "table", rows: data.length, data });
+        setTab("chat");
+        setTimeout(() => inputRef.current?.focus(), 100);
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      // CSV / TXT — existing text flow
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const text = ev.target.result;
+        const data = parseCSV(text);
+        setAttachedFile({ name: file.name, type: "table", rows: data.length, data });
+        setTab("chat");
+        setTimeout(() => inputRef.current?.focus(), 100);
+      };
+      reader.readAsText(file);
+    }
     // Reset so same file can be re-uploaded
     e.target.value = "";
   }, []);
@@ -1094,13 +1121,21 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       if (open.length) ctx += "\nOpen tasks: " + open.map((t) => '"' + t.title + '" (' + t.priority + ", due: " + (t.due || "none") + ")").join(", ");
       if (pending.length) ctx += "\nPending reminders: " + pending.map((r) => '"' + r.title + '" at ' + r.time).join(", ");
       if (!open.length && !pending.length) ctx += "\nNo open tasks or reminders.";
-      // Inject attached file data (CSV or Drive sheet)
-      if (attachedFile) {
+      // Inject attached file data (CSV/Excel as text preview, PDF as native content block)
+      if (attachedFile && attachedFile.type !== "pdf") {
         const preview = attachedFile.data.slice(0, 100).map((r) => r.join("\t")).join("\n");
         const truncNote = attachedFile.rows > 100 ? `\n... (${attachedFile.rows - 100} more rows not shown)` : "";
         ctx += `\n\nAttached file: "${attachedFile.name}" — ${attachedFile.rows} rows × ${(attachedFile.data[0] || []).length} columns\n${preview}${truncNote}`;
       }
       apiMsgs[apiMsgs.length - 1].content += ctx;
+      // For PDF: convert last message to content-block array so Claude reads the PDF natively
+      if (attachedFile?.type === "pdf") {
+        const lastMsg = apiMsgs[apiMsgs.length - 1];
+        lastMsg.content = [
+          { type: "document", source: { type: "base64", media_type: "application/pdf", data: attachedFile.base64 } },
+          { type: "text", text: lastMsg.content },
+        ];
+      }
       // Attach live Google context when relevant
       const calToken = localStorage.getItem("mary-google-token");
       const calExpiry = localStorage.getItem("mary-google-token-expiry");
@@ -1288,7 +1323,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
 
       // ─── Bulk CSV Import to Pipeline ────────────────────────────────
       let bulkLeadNote = "";
-      if (parsed.add_leads_bulk && attachedFile?.data) {
+      if (parsed.add_leads_bulk && attachedFile?.type === "table" && attachedFile?.data) {
         try {
           const leads = mapCSVToLeads(attachedFile.data);
           if (leads.length === 0) {
@@ -1752,12 +1787,12 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
 
             {/* ── Input toolbar — pinned to bottom, never scrolls ── */}
             <div style={S.chatBottom}>
-              <input ref={fileInputRef} type="file" accept=".csv,.txt" style={{display:"none"}} onChange={handleFileUpload} />
+              <input ref={fileInputRef} type="file" accept=".csv,.txt,.xlsx,.xls,.pdf" style={{display:"none"}} onChange={handleFileUpload} />
               {showAttachMenu && (
                 <div style={S.attachMenu} onMouseLeave={() => {}}>
                   <button onClick={() => { fileInputRef.current?.click(); setShowAttachMenu(false); }} style={S.attachOpt}>
                     <span style={{fontSize:18}}>📎</span>
-                    <div><div style={{fontWeight:600,fontSize:13}}>Upload CSV</div><div style={{fontSize:11,color:"#7a96bc"}}>Import leads or data from a file</div></div>
+                    <div><div style={{fontWeight:600,fontSize:13}}>Upload File</div><div style={{fontSize:11,color:"#7a96bc"}}>CSV, Excel (.xlsx), or PDF</div></div>
                   </button>
                   <button onClick={openDrivePicker} style={S.attachOpt}>
                     <span style={{fontSize:18}}>📊</span>
@@ -1767,10 +1802,10 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               )}
               {attachedFile && (
                 <div style={S.fileChip}>
-                  <span style={{fontSize:14}}>📄</span>
+                  <span style={{fontSize:14}}>{attachedFile.type === "pdf" ? "📕" : attachedFile.name.endsWith(".xlsx") || attachedFile.name.endsWith(".xls") ? "📊" : "📄"}</span>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{attachedFile.name}</div>
-                    <div style={{fontSize:11,color:"#7a96bc"}}>{attachedFile.rows} rows</div>
+                    <div style={{fontSize:11,color:"#7a96bc"}}>{attachedFile.type === "pdf" ? "PDF — ready to read" : `${attachedFile.rows} rows`}</div>
                   </div>
                   <button onClick={() => setAttachedFile(null)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.3)",cursor:"pointer",fontSize:14,padding:4}}>✕</button>
                 </div>
