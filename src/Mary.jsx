@@ -1468,7 +1468,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       </header>
 
       {/* Content */}
-      <main style={S.main}>
+      <main style={tab === "chat" ? {...S.main, padding: 0, overflowY: "hidden", display: "flex", flexDirection: "column"} : S.main}>
 
         {/* ── TODAY ── */}
         {tab === "today" && (
@@ -1784,6 +1784,11 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               </div>
             )}
 
+            {chat.length > 0 && (
+              <div style={{display:"flex",justifyContent:"center",padding:"2px 16px 0"}}>
+                <button onClick={() => { setChat([]); saveData("mary-chat", []); }} style={{fontSize:11,color:"rgba(255,255,255,0.18)",background:"none",border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",letterSpacing:"0.3px"}}>✕ New chat</button>
+              </div>
+            )}
             <div style={S.chatBar}>
               <button onClick={() => setShowAttachMenu((p) => !p)} style={{...S.sendBtn, background: showAttachMenu ? "rgba(52,168,83,0.2)" : "rgba(255,255,255,0.06)", color: showAttachMenu ? "#34a853" : "#7a96bc", boxShadow:"none", fontSize:16}} title="Attach file">📎</button>
               <button onClick={startListening} style={{...S.sendBtn, background: isListening ? "#ef4444" : "rgba(255,255,255,0.06)", color: isListening ? "#fff" : "#7a96bc", boxShadow:"none", fontSize:16}} title="Voice input">🎤</button>
@@ -1938,17 +1943,17 @@ const S = {
   clrDone: { background: "none", border: "none", color: "#7a96bc", fontSize: 11, cursor: "pointer", marginTop: 8, fontFamily: "'Plus Jakarta Sans', sans-serif", textDecoration: "underline" },
   hint: { fontSize: 12, color: "#7a96bc", padding: "8px 0 16px", lineHeight: 1.5, borderBottom: "1px solid rgba(255,255,255,0.05)", marginBottom: 16 },
   // Chat
-  chatWrap: { display: "flex", flexDirection: "column", height: "calc(100vh - 220px)", margin: -16 },
-  chatScroll: { flex: 1, overflowY: "auto", padding: "16px 16px 8px" },
+  chatWrap: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 },
+  chatScroll: { flex: 1, overflowY: "auto", overflowX: "hidden", padding: "12px 16px 8px" },
   chatEmpty: { textAlign: "center", padding: "24px 8px" },
   sug: { padding: "10px 14px", background: "rgba(16,31,58,0.7)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, color: "rgba(255,255,255,0.6)", fontSize: 13, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: "left", fontWeight: 400 },
   uMsg: { display: "flex", justifyContent: "flex-end", marginBottom: 12 },
   aMsg: { display: "flex", justifyContent: "flex-start", gap: 8, marginBottom: 12, alignItems: "flex-start" },
   av: { marginTop: 8, flexShrink: 0 },
-  uBub: { background: "linear-gradient(135deg, #00dba8, #1a6ee0)", color: "#fff", padding: "10px 14px", borderRadius: "18px 18px 4px 18px", fontSize: 14, maxWidth: "80%", lineHeight: 1.55, fontWeight: 500 },
-  aBub: { background: "rgba(16,31,58,0.85)", backdropFilter: "blur(12px)", color: "rgba(255,255,255,0.85)", padding: "11px 14px", borderRadius: "18px 18px 18px 4px", fontSize: 14, maxWidth: "85%", lineHeight: 1.6, fontWeight: 300, border: "1px solid rgba(255,255,255,0.07)" },
+  uBub: { background: "linear-gradient(135deg, #00dba8, #1a6ee0)", color: "#fff", padding: "10px 14px", borderRadius: "18px 18px 4px 18px", fontSize: 14, maxWidth: "78%", lineHeight: 1.55, fontWeight: 500, wordBreak: "break-word", overflowWrap: "anywhere" },
+  aBub: { background: "rgba(16,31,58,0.85)", backdropFilter: "blur(12px)", color: "rgba(255,255,255,0.85)", padding: "11px 14px", borderRadius: "18px 18px 18px 4px", fontSize: 14, maxWidth: "82%", lineHeight: 1.6, fontWeight: 300, border: "1px solid rgba(255,255,255,0.07)", wordBreak: "break-word", overflowWrap: "anywhere" },
   dot: { animation: "dotPulse 1s ease-in-out infinite", fontSize: 10, color: "#00dba8" },
-  chatBar: { display: "flex", gap: 8, padding: "10px 16px 12px", borderTop: "1px solid rgba(255,255,255,0.05)", background: "rgba(6,14,30,0.9)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" },
+  chatBar: { display: "flex", gap: 8, padding: "10px 16px 12px", borderTop: "1px solid rgba(255,255,255,0.05)", background: "rgba(6,14,30,0.95)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", flexShrink: 0 },
   chatIn: { flex: 1, padding: "10px 14px", background: "rgba(16,31,58,0.8)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 14, color: "#fff", fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif", outline: "none", fontWeight: 300 },
   sendBtn: { width: 42, height: 42, background: "linear-gradient(135deg,#00dba8,#1a6ee0)", color: "#fff", border: "none", borderRadius: 14, fontSize: 18, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(0,219,168,0.3)" },
   // Google
