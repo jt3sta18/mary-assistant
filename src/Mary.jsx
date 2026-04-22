@@ -1,5 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
+function MarkdownText({ text, style }) {
+  if (!text) return null;
+  const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const html = escaped
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.*?)\*/g, "<em>$1</em>")
+    .replace(/`(.*?)`/g, '<code style="background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12px">$1</code>')
+    .replace(/^[-•]\s(.+)/gm, '<li style="margin:2px 0">$1</li>')
+    .replace(/(<li.*<\/li>(\n)?)+/g, (m) => `<ul style="margin:6px 0;padding-left:18px">${m}</ul>`)
+    .replace(/\n\n/g, '</p><p style="margin:8px 0 0">')
+    .replace(/\n/g, "<br/>");
+  return <div style={style} dangerouslySetInnerHTML={{ __html: `<p style="margin:0">${html}</p>` }} />;
+}
+
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send";
 
@@ -214,6 +228,7 @@ export default function Mary() {
   const [googleToken, setGoogleToken] = useState(null);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [userName, setUserName] = useState("");
+  const [userPhoto, setUserPhoto] = useState("");
   const [inboxEmails, setInboxEmails] = useState([]);
   const [isListening, setIsListening] = useState(false);
   const [suggestedTasks, setSuggestedTasks] = useState([]);
@@ -252,7 +267,9 @@ export default function Mary() {
     const storedToken = localStorage.getItem("mary-google-token");
     const tokenExpiry = localStorage.getItem("mary-google-token-expiry");
     const storedName = localStorage.getItem("mary-user-name");
+    const storedPhoto = localStorage.getItem("mary-user-photo");
     if (storedName) setUserName(storedName);
+    if (storedPhoto) setUserPhoto(storedPhoto);
     if (storedToken && tokenExpiry && Date.now() < parseInt(tokenExpiry)) {
       setGoogleToken(storedToken);
       fetchGmailEmails(storedToken).then(setInboxEmails).catch(() => {});
@@ -283,6 +300,10 @@ export default function Mary() {
           if (profile?.given_name) {
             setUserName(profile.given_name);
             localStorage.setItem("mary-user-name", profile.given_name);
+          }
+          if (profile?.picture) {
+            setUserPhoto(profile.picture);
+            localStorage.setItem("mary-user-photo", profile.picture);
           }
           fetchGmailEmails(response.access_token).then(setInboxEmails).catch(() => {});
         },
@@ -587,15 +608,28 @@ export default function Mary() {
   // Gradient text helper
   const gradText = { background: "linear-gradient(90deg, #00f5c0, #38aaff)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" };
 
+  const TABS = [
+    { k: "today", icon: "◈", label: "Today" },
+    { k: "tasks", icon: "☐", label: "Tasks", badge: openTasks.length },
+    { k: "inbox", icon: "✉", label: "Inbox", badge: inboxEmails.length },
+    { k: "reminders", icon: "⏰", label: "Alerts", badge: pending.length },
+    { k: "chat", icon: "✦", label: "Chat" },
+  ];
+
   return (
     <div style={S.root}>
       <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+      {/* Background blobs */}
+      <div style={S.blob1} />
+      <div style={S.blob2} />
+      <div style={S.blob3} />
 
       {/* Notification Banner */}
       {notifPerm !== "granted" && (
         <div style={S.notifBanner}>
           <div style={S.notifRow}>
-            <div><div style={S.notifTitle}>🔔 Enable push notifications</div><div style={S.notifDesc}>Get alerts for reminders & upcoming meetings</div></div>
+            <div><div style={S.notifTitle}>🔔 Enable notifications</div><div style={S.notifDesc}>Get alerts for reminders & meetings</div></div>
             <button onClick={enableNotif} style={S.notifBtn}>Enable</button>
           </div>
         </div>
@@ -608,27 +642,22 @@ export default function Mary() {
             <div style={S.logo}><span style={gradText}>Mary</span></div>
             <div style={S.dateLbl}>{dateStr}</div>
           </div>
-          <div style={S.greet}>{greet}</div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{textAlign:"right"}}>
+              <div style={S.greet}>{greet}</div>
+              {googleToken && <div style={{fontSize:10,color:"#7a96bc",cursor:"pointer",marginTop:2}} onClick={disconnectGoogle}>✓ Google connected</div>}
+            </div>
+            {userPhoto
+              ? <img src={userPhoto} alt="profile" style={{width:36,height:36,borderRadius:"50%",border:"2px solid rgba(0,245,192,0.3)",objectFit:"cover"}} />
+              : <div style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,#00dba8,#38aaff)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:"#071428"}}>{userName?.[0]||"M"}</div>
+            }
+          </div>
         </div>
         <div style={S.poweredBy}>
           <div style={S.liveDot} />
           <span>powered by <span style={{ color: "#00f5c0", fontWeight: 600 }}>finoveo</span></span>
-          {googleToken && <span style={{marginLeft:"auto",fontSize:10,color:"#7a96bc",cursor:"pointer"}} onClick={disconnectGoogle}>✓ Google · disconnect</span>}
         </div>
       </header>
-
-      {/* Tab Bar */}
-      <nav style={S.tabBar}>
-        {[
-          { k: "today", l: "Today" },
-          { k: "tasks", l: "Tasks" + (openTasks.length ? " (" + openTasks.length + ")" : "") },
-          { k: "inbox", l: "Inbox" + (inboxEmails.length ? " (" + inboxEmails.length + ")" : "") },
-          { k: "reminders", l: "Alerts" + (pending.length ? " (" + pending.length + ")" : "") },
-          { k: "chat", l: "Chat" },
-        ].map((t) => (
-          <button key={t.k} onClick={() => setTab(t.k)} style={{ ...S.tab, ...(tab === t.k ? S.tabOn : {}) }}>{t.l}</button>
-        ))}
-      </nav>
 
       {/* Content */}
       <main style={S.main}>
@@ -686,16 +715,22 @@ export default function Mary() {
             {events.length > 0 && (
               <div style={S.card}>
                 <div style={S.cHead}><div style={{...S.headDot,background:"#38aaff",boxShadow:"0 0 8px #38aaff"}} /><span style={S.cTitle}>Upcoming Events</span></div>
-                {events.map((ev, i) => (
-                  <div key={i} style={S.evItem}>
-                    <div style={S.evTime}>{formatTime(ev.start)}</div>
-                    <div style={S.evInfo}>
-                      <div style={S.evTitle}>{ev.title}</div>
-                      {ev.location && <div style={S.evLoc}>📍 {ev.location}</div>}
-                      {ev.end && <div style={S.evDur}>{formatTime(ev.start)} – {formatTime(ev.end)}</div>}
+                {events.map((ev, i) => {
+                  const durMin = ev.start && ev.end ? Math.round((new Date(ev.end) - new Date(ev.start)) / 60000) : null;
+                  const durLabel = durMin ? durMin >= 60 ? `${Math.floor(durMin/60)}h${durMin%60?` ${durMin%60}m`:""}` : `${durMin}m` : null;
+                  return (
+                    <div key={i} style={S.evItem}>
+                      <div style={S.evTime}>{formatTime(ev.start)}</div>
+                      <div style={S.evInfo}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <div style={S.evTitle}>{ev.title}</div>
+                          {durLabel && <span style={S.durPill}>{durLabel}</span>}
+                        </div>
+                        {ev.location && <div style={S.evLoc}>📍 {ev.location}</div>}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -755,7 +790,7 @@ export default function Mary() {
                 <div style={S.secTitle}>Open ({openTasks.length})</div>
                 {openTasks.map((t) => (
                   <div key={t.id} style={S.tItem}>
-                    <button onClick={() => setTasks((p) => p.map((x) => x.id === t.id ? {...x, done:true} : x))} style={S.chk}>☐</button>
+                    <button onClick={() => { setTasks((p) => p.map((x) => x.id === t.id ? {...x, done:true} : x)); }} style={{...S.chk, animation:"taskDone 0.3s ease"}}>☐</button>
                     <div style={{flex:1}}><div style={{fontSize:14,fontWeight:500}}>{t.title}</div><div style={{fontSize:12,color:"#7a96bc",marginTop:2}}><span style={{color:PC[t.priority]}}>{t.priority}</span>{t.due && <span> · {relativeDate(t.due)}</span>}</div></div>
                     <button onClick={() => setTasks((p) => p.filter((x) => x.id !== t.id))} style={S.del}>✕</button>
                   </div>
@@ -884,7 +919,9 @@ export default function Mary() {
               {chat.map((m, i) => (
                 <div key={i} style={m.role === "user" ? S.uMsg : S.aMsg}>
                   {m.role === "assistant" && <div style={S.av}><div style={{width:7,height:7,borderRadius:"50%",background:"#00f5c0",boxShadow:"0 0 8px #00f5c0"}} /></div>}
-                  <div style={m.role === "user" ? S.uBub : S.aBub}>{m.text}</div>
+                  {m.role === "user"
+                    ? <div style={S.uBub}>{m.text}</div>
+                    : <MarkdownText text={m.text} style={S.aBub} />}
                 </div>
               ))}
               {loading && (
@@ -905,98 +942,135 @@ export default function Mary() {
         )}
       </main>
 
+      {/* Bottom Nav */}
+      <nav style={S.bottomNav}>
+        {TABS.map((t) => (
+          <button key={t.k} onClick={() => setTab(t.k)} style={{...S.navBtn, ...(tab===t.k?S.navBtnOn:{})}}>
+            <div style={{position:"relative",display:"inline-block"}}>
+              <span style={{fontSize:18,lineHeight:1}}>{t.icon}</span>
+              {t.badge > 0 && <span style={S.badge}>{t.badge}</span>}
+            </div>
+            <span style={S.navLbl}>{t.label}</span>
+            {tab===t.k && <div style={S.navDot}/>}
+          </button>
+        ))}
+      </nav>
+
+      {/* Floating Ask Mary button — shown on all tabs except chat */}
+      {tab !== "chat" && (
+        <button onClick={() => setTab("chat")} style={S.fab}>
+          <span style={{fontSize:20}}>✦</span>
+        </button>
+      )}
+
       <style>{`
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
         @keyframes dotPulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
         @keyframes livePulse { 0%, 100% { opacity: 1; box-shadow: 0 0 6px #00f5c0; } 50% { opacity: 0.5; box-shadow: 0 0 2px #00f5c0; } }
+        @keyframes blobMove { 0%,100% { transform: translate(0,0) scale(1); } 33% { transform: translate(30px,-20px) scale(1.05); } 66% { transform: translate(-20px,15px) scale(0.97); } }
+        @keyframes fabPulse { 0%,100% { box-shadow: 0 4px 24px rgba(0,219,168,0.4); } 50% { box-shadow: 0 4px 36px rgba(0,219,168,0.7); } }
+        @keyframes taskDone { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
         * { box-sizing: border-box; }
+        ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
       `}</style>
     </div>
   );
 }
 
 const S = {
-  root: { fontFamily: "'Plus Jakarta Sans', -apple-system, sans-serif", background: "#071428", color: "#ffffff", minHeight: "100vh", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column" },
+  // Root & background
+  root: { fontFamily: "'Plus Jakarta Sans', -apple-system, sans-serif", background: "#060e1e", color: "#ffffff", minHeight: "100vh", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" },
+  blob1: { position: "fixed", top: -120, left: -80, width: 320, height: 320, borderRadius: "50%", background: "radial-gradient(circle, rgba(0,219,168,0.12) 0%, transparent 70%)", animation: "blobMove 12s ease-in-out infinite", pointerEvents: "none", zIndex: 0 },
+  blob2: { position: "fixed", top: 200, right: -100, width: 280, height: 280, borderRadius: "50%", background: "radial-gradient(circle, rgba(56,170,255,0.10) 0%, transparent 70%)", animation: "blobMove 15s ease-in-out infinite reverse", pointerEvents: "none", zIndex: 0 },
+  blob3: { position: "fixed", bottom: 100, left: 60, width: 200, height: 200, borderRadius: "50%", background: "radial-gradient(circle, rgba(167,139,250,0.08) 0%, transparent 70%)", animation: "blobMove 18s ease-in-out infinite", pointerEvents: "none", zIndex: 0 },
   // Notif banner
-  notifBanner: { background: "linear-gradient(135deg, rgba(0,219,168,0.08), rgba(56,170,255,0.05))", borderBottom: "1px solid rgba(0,219,168,0.15)", padding: "10px 16px" },
+  notifBanner: { background: "rgba(0,219,168,0.06)", borderBottom: "1px solid rgba(0,219,168,0.12)", padding: "10px 16px", position: "relative", zIndex: 10 },
   notifRow: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 },
-  notifTitle: { fontSize: 13, fontWeight: 600, color: "#00f5c0" },
-  notifDesc: { fontSize: 12, color: "#7a96bc" },
-  notifBtn: { padding: "6px 16px", background: "#00dba8", color: "#071428", border: "none", borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", boxShadow: "0 0 16px rgba(0,219,168,0.3)" },
+  notifTitle: { fontSize: 12, fontWeight: 600, color: "#00f5c0" },
+  notifDesc: { fontSize: 11, color: "#7a96bc" },
+  notifBtn: { padding: "5px 14px", background: "#00dba8", color: "#071428", border: "none", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap" },
   // Header
-  header: { padding: "20px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "linear-gradient(180deg, #0c1a34, #071428)" },
-  headerRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" },
-  logo: { fontSize: 26, fontWeight: 800, letterSpacing: "-1.5px", lineHeight: 1 },
-  dateLbl: { fontSize: 12, color: "#7a96bc", marginTop: 4, fontWeight: 400 },
-  greet: { fontSize: 13, color: "rgba(255,255,255,0.65)", fontWeight: 300, marginTop: 4 },
-  poweredBy: { display: "flex", alignItems: "center", gap: 6, marginTop: 10, fontSize: 11, color: "#7a96bc", fontWeight: 400 },
-  liveDot: { width: 7, height: 7, borderRadius: "50%", background: "#00f5c0", boxShadow: "0 0 8px #00f5c0", animation: "livePulse 2s ease-in-out infinite" },
-  // Tabs
-  tabBar: { display: "flex", padding: "0 8px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#071428" },
-  tab: { flex: 1, padding: "12px 0", background: "none", border: "none", borderBottom: "2px solid transparent", color: "#7a96bc", fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", transition: "all .25s ease", letterSpacing: "0.3px" },
-  tabOn: { color: "#00f5c0", borderBottomColor: "#00f5c0" },
-  main: { flex: 1, padding: 16, overflowY: "auto" },
-  anim: { animation: "fadeIn 0.3s ease" },
-  // Cards
-  card: { background: "#101f3a", borderRadius: 14, padding: 16, marginBottom: 12, border: "1px solid rgba(255,255,255,0.08)", transition: "border-color .3s ease" },
+  header: { padding: "20px 20px 12px", background: "rgba(6,14,30,0.8)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.05)", position: "relative", zIndex: 10 },
+  headerRow: { display: "flex", justifyContent: "space-between", alignItems: "center" },
+  logo: { fontSize: 28, fontWeight: 800, letterSpacing: "-1.5px", lineHeight: 1 },
+  dateLbl: { fontSize: 11, color: "#7a96bc", marginTop: 3, fontWeight: 400 },
+  greet: { fontSize: 12, color: "rgba(255,255,255,0.6)", fontWeight: 400, textAlign: "right" },
+  poweredBy: { display: "flex", alignItems: "center", gap: 6, marginTop: 10, fontSize: 10, color: "#7a96bc", fontWeight: 400 },
+  liveDot: { width: 6, height: 6, borderRadius: "50%", background: "#00f5c0", boxShadow: "0 0 8px #00f5c0", animation: "livePulse 2s ease-in-out infinite" },
+  // Main
+  main: { flex: 1, padding: "16px 16px 100px", overflowY: "auto", position: "relative", zIndex: 1 },
+  anim: { animation: "slideUp 0.3s cubic-bezier(0.16,1,0.3,1)" },
+  // Cards — glassmorphism
+  card: { background: "rgba(16,31,58,0.7)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: 16, padding: 16, marginBottom: 12, border: "1px solid rgba(255,255,255,0.07)", boxShadow: "0 4px 24px rgba(0,0,0,0.2)" },
   cHead: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 },
   headDot: { width: 7, height: 7, borderRadius: "50%", background: "#00dba8", boxShadow: "0 0 8px #00dba8", flexShrink: 0 },
-  cTitle: { fontSize: 13, fontWeight: 700, letterSpacing: "0.3px", flex: 1, textTransform: "uppercase", letterSpacing: "1.5px", fontSize: 11 },
-  seeAll: { background: "none", border: "none", color: "#00f5c0", fontSize: 12, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500 },
-  refreshBtn: { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "#7a96bc", fontSize: 11, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, padding: "4px 10px", transition: "all .2s ease" },
-  tomorrowCard: { background: "linear-gradient(135deg, rgba(56,170,255,0.06), rgba(26,110,224,0.04))", borderRadius: 14, padding: 16, marginBottom: 12, border: "1px solid rgba(56,170,255,0.12)" },
-  bText: { fontSize: 14, lineHeight: 1.65, color: "rgba(255,255,255,0.65)", whiteSpace: "pre-wrap", fontWeight: 300 },
-  // Bible verse
-  verseCard: { background: "linear-gradient(135deg, rgba(0,219,168,0.06), rgba(56,170,255,0.04))", borderRadius: 14, padding: "20px 18px", marginBottom: 12, border: "1px solid rgba(0,245,192,0.12)", position: "relative", overflow: "hidden" },
-  verseMark: { position: "absolute", top: 10, right: 14, fontSize: 20, opacity: 0.12, background: "linear-gradient(90deg, #00f5c0, #38aaff)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" },
-  verseText: { fontSize: 15, lineHeight: 1.7, color: "rgba(255,255,255,0.85)", fontWeight: 300, fontStyle: "italic", marginBottom: 10 },
+  cTitle: { fontSize: 10, fontWeight: 700, flex: 1, textTransform: "uppercase", letterSpacing: "2px", color: "rgba(255,255,255,0.5)" },
+  seeAll: { background: "none", border: "none", color: "#00f5c0", fontSize: 11, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600 },
+  refreshBtn: { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "#7a96bc", fontSize: 10, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, padding: "4px 10px" },
+  tomorrowCard: { background: "rgba(26,57,120,0.3)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: 16, padding: 16, marginBottom: 12, border: "1px solid rgba(56,170,255,0.12)", boxShadow: "0 4px 24px rgba(0,0,0,0.2)" },
+  bText: { fontSize: 14, lineHeight: 1.7, color: "rgba(255,255,255,0.7)", fontWeight: 300 },
+  // Bible verse — more ornate
+  verseCard: { background: "linear-gradient(135deg, rgba(0,219,168,0.08), rgba(56,170,255,0.05))", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: 20, padding: "24px 20px", marginBottom: 12, border: "1px solid rgba(0,245,192,0.15)", position: "relative", overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.2)" },
+  verseMark: { position: "absolute", top: -10, left: 12, fontSize: 80, opacity: 0.05, color: "#00f5c0", lineHeight: 1, fontFamily: "Georgia, serif", pointerEvents: "none" },
+  verseText: { fontSize: 16, lineHeight: 1.75, color: "rgba(255,255,255,0.9)", fontWeight: 300, fontStyle: "italic", marginBottom: 14, fontFamily: "Georgia, serif", position: "relative" },
   verseFooter: { display: "flex", justifyContent: "space-between", alignItems: "center" },
-  verseRef: { fontSize: 12, fontWeight: 600, color: "#00dba8", letterSpacing: "0.5px" },
-  shareBtn: { padding: "5px 14px", background: "rgba(0,219,168,0.1)", border: "1px solid rgba(0,219,168,0.25)", borderRadius: 8, color: "#00f5c0", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", transition: "all .2s ease" },
+  verseRef: { fontSize: 12, fontWeight: 700, color: "#00dba8", letterSpacing: "0.5px" },
+  shareBtn: { padding: "5px 14px", background: "rgba(0,219,168,0.1)", border: "1px solid rgba(0,219,168,0.25)", borderRadius: 8, color: "#00f5c0", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" },
   skelWrap: { display: "flex", flexDirection: "column", gap: 8 },
-  skel: { height: 14, background: "rgba(255,255,255,0.06)", borderRadius: 6, animation: "pulse 1.5s ease-in-out infinite" },
+  skel: { height: 13, background: "rgba(255,255,255,0.05)", borderRadius: 6, animation: "pulse 1.5s ease-in-out infinite" },
   // Events
-  evItem: { display: "flex", gap: 12, alignItems: "flex-start", padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" },
-  evTime: { fontSize: 12, fontWeight: 600, color: "#00f5c0", minWidth: 70, paddingTop: 2, fontFamily: "'DM Mono', monospace" },
+  evItem: { display: "flex", gap: 12, alignItems: "flex-start", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" },
+  evTime: { fontSize: 12, fontWeight: 600, color: "#00f5c0", minWidth: 65, paddingTop: 2, fontFamily: "'DM Mono', monospace" },
   evInfo: { flex: 1 },
   evTitle: { fontSize: 14, fontWeight: 500 },
   evLoc: { fontSize: 12, color: "#7a96bc", marginTop: 2 },
-  evDur: { fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 2, fontFamily: "'DM Mono', monospace" },
+  durPill: { fontSize: 10, fontWeight: 600, color: "#38aaff", background: "rgba(56,170,255,0.12)", border: "1px solid rgba(56,170,255,0.2)", borderRadius: 20, padding: "1px 7px", flexShrink: 0 },
   // Mini tasks
-  mini: { display: "flex", alignItems: "center", gap: 8, padding: "6px 0" },
+  mini: { display: "flex", alignItems: "center", gap: 8, padding: "7px 0" },
   pDot: { width: 6, height: 6, borderRadius: "50%", flexShrink: 0 },
   miniT: { fontSize: 13, flex: 1, fontWeight: 400 },
   miniD: { fontSize: 11, color: "#7a96bc", fontFamily: "'DM Mono', monospace" },
   // Quick actions
   qActions: { display: "flex", gap: 8, marginTop: 8 },
-  qBtn: { flex: 1, padding: "12px 16px", background: "#00dba8", color: "#071428", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: "0 4px 20px rgba(0,219,168,0.3)", transition: "all .2s ease" },
-  qBtn2: { flex: 1, padding: "12px 16px", background: "rgba(255,255,255,0.04)", color: "#fff", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 10, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" },
+  qBtn: { flex: 1, padding: "13px 16px", background: "linear-gradient(135deg, #00dba8, #0099a8)", color: "#071428", border: "none", borderRadius: 14, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: "0 4px 20px rgba(0,219,168,0.35)" },
+  qBtn2: { flex: 1, padding: "13px 16px", background: "rgba(255,255,255,0.04)", color: "#fff", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 14, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" },
   // Tasks
   addRow: { display: "flex", gap: 8, marginBottom: 16 },
-  addIn: { flex: 1, padding: "10px 14px", background: "#101f3a", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 10, color: "#fff", fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif", outline: "none", fontWeight: 300 },
-  addBtn: { width: 40, height: 40, background: "#00dba8", color: "#071428", border: "none", borderRadius: 10, fontSize: 20, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(0,219,168,0.3)" },
-  empty: { textAlign: "center", padding: "48px 20px", color: "rgba(255,255,255,0.65)" },
-  secTitle: { fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "2px", color: "#00dba8", marginBottom: 8 },
-  tItem: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" },
-  chk: { background: "none", border: "none", color: "#00dba8", fontSize: 18, cursor: "pointer", padding: 0, lineHeight: 1 },
-  del: { background: "none", border: "none", color: "rgba(255,255,255,0.2)", fontSize: 14, cursor: "pointer", padding: 4 },
-  clrDone: { background: "none", border: "none", color: "#7a96bc", fontSize: 12, cursor: "pointer", marginTop: 8, fontFamily: "'Plus Jakarta Sans', sans-serif", textDecoration: "underline" },
-  hint: { fontSize: 13, color: "#7a96bc", padding: "8px 0 16px", lineHeight: 1.5, borderBottom: "1px solid rgba(255,255,255,0.06)", marginBottom: 16, fontWeight: 300 },
+  addIn: { flex: 1, padding: "11px 14px", background: "rgba(16,31,58,0.7)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 12, color: "#fff", fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif", outline: "none", fontWeight: 300 },
+  addBtn: { width: 42, height: 42, background: "linear-gradient(135deg,#00dba8,#0099a8)", color: "#071428", border: "none", borderRadius: 12, fontSize: 22, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(0,219,168,0.35)" },
+  empty: { textAlign: "center", padding: "48px 20px", color: "rgba(255,255,255,0.4)" },
+  secTitle: { fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "2px", color: "#00dba8", marginBottom: 10 },
+  tItem: { display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" },
+  chk: { background: "none", border: "none", color: "#00dba8", fontSize: 20, cursor: "pointer", padding: 0, lineHeight: 1 },
+  del: { background: "none", border: "none", color: "rgba(255,255,255,0.15)", fontSize: 14, cursor: "pointer", padding: 4 },
+  clrDone: { background: "none", border: "none", color: "#7a96bc", fontSize: 11, cursor: "pointer", marginTop: 8, fontFamily: "'Plus Jakarta Sans', sans-serif", textDecoration: "underline" },
+  hint: { fontSize: 12, color: "#7a96bc", padding: "8px 0 16px", lineHeight: 1.5, borderBottom: "1px solid rgba(255,255,255,0.05)", marginBottom: 16 },
   // Chat
-  chatWrap: { display: "flex", flexDirection: "column", height: "calc(100vh - 170px)", margin: -16 },
+  chatWrap: { display: "flex", flexDirection: "column", height: "calc(100vh - 220px)", margin: -16 },
   chatScroll: { flex: 1, overflowY: "auto", padding: "16px 16px 8px" },
   chatEmpty: { textAlign: "center", padding: "24px 8px" },
-  sug: { padding: "10px 14px", background: "#101f3a", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, color: "rgba(255,255,255,0.65)", fontSize: 13, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: "left", fontWeight: 400, transition: "border-color .2s ease" },
-  uMsg: { display: "flex", justifyContent: "flex-end", marginBottom: 10 },
-  aMsg: { display: "flex", justifyContent: "flex-start", gap: 8, marginBottom: 10, alignItems: "flex-start" },
-  av: { marginTop: 10, flexShrink: 0 },
-  uBub: { background: "linear-gradient(135deg, #00dba8, #1a6ee0)", color: "#071428", padding: "10px 14px", borderRadius: "14px 14px 4px 14px", fontSize: 14, maxWidth: "80%", lineHeight: 1.5, fontWeight: 600 },
-  aBub: { background: "#101f3a", color: "rgba(255,255,255,0.85)", padding: "10px 14px", borderRadius: "14px 14px 14px 4px", fontSize: 14, maxWidth: "85%", lineHeight: 1.5, whiteSpace: "pre-wrap", fontWeight: 300, border: "1px solid rgba(255,255,255,0.06)" },
+  sug: { padding: "10px 14px", background: "rgba(16,31,58,0.7)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, color: "rgba(255,255,255,0.6)", fontSize: 13, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: "left", fontWeight: 400 },
+  uMsg: { display: "flex", justifyContent: "flex-end", marginBottom: 12 },
+  aMsg: { display: "flex", justifyContent: "flex-start", gap: 8, marginBottom: 12, alignItems: "flex-start" },
+  av: { marginTop: 8, flexShrink: 0 },
+  uBub: { background: "linear-gradient(135deg, #00dba8, #1a6ee0)", color: "#fff", padding: "10px 14px", borderRadius: "18px 18px 4px 18px", fontSize: 14, maxWidth: "80%", lineHeight: 1.55, fontWeight: 500 },
+  aBub: { background: "rgba(16,31,58,0.85)", backdropFilter: "blur(12px)", color: "rgba(255,255,255,0.85)", padding: "11px 14px", borderRadius: "18px 18px 18px 4px", fontSize: 14, maxWidth: "85%", lineHeight: 1.6, fontWeight: 300, border: "1px solid rgba(255,255,255,0.07)" },
   dot: { animation: "dotPulse 1s ease-in-out infinite", fontSize: 10, color: "#00dba8" },
-  chatBar: { display: "flex", gap: 8, padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.06)", background: "#071428" },
-  chatIn: { flex: 1, padding: "10px 14px", background: "#101f3a", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 12, color: "#fff", fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif", outline: "none", fontWeight: 300 },
-  sendBtn: { width: 40, height: 40, background: "#00dba8", color: "#071428", border: "none", borderRadius: 12, fontSize: 18, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(0,219,168,0.3)" },
-  gcBanner: { display: "flex", alignItems: "center", gap: 12, background: "rgba(56,170,255,0.06)", border: "1px solid rgba(56,170,255,0.15)", borderRadius: 12, padding: "12px 14px", marginBottom: 12 },
+  chatBar: { display: "flex", gap: 8, padding: "10px 16px 12px", borderTop: "1px solid rgba(255,255,255,0.05)", background: "rgba(6,14,30,0.9)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" },
+  chatIn: { flex: 1, padding: "10px 14px", background: "rgba(16,31,58,0.8)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 14, color: "#fff", fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif", outline: "none", fontWeight: 300 },
+  sendBtn: { width: 42, height: 42, background: "linear-gradient(135deg,#00dba8,#1a6ee0)", color: "#fff", border: "none", borderRadius: 14, fontSize: 18, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(0,219,168,0.3)" },
+  // Google
+  gcBanner: { display: "flex", alignItems: "center", gap: 12, background: "rgba(56,170,255,0.06)", border: "1px solid rgba(56,170,255,0.15)", borderRadius: 14, padding: "12px 14px", marginBottom: 12 },
   gcBtn: { padding: "6px 14px", background: "#38aaff", color: "#071428", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap" },
+  // Bottom nav
+  bottomNav: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, display: "flex", background: "rgba(6,14,30,0.92)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", borderTop: "1px solid rgba(255,255,255,0.07)", padding: "6px 0 env(safe-area-inset-bottom,6px)", zIndex: 100 },
+  navBtn: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "6px 0", background: "none", border: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", position: "relative", transition: "color .2s ease" },
+  navBtnOn: { color: "#00f5c0" },
+  navLbl: { fontSize: 9, fontWeight: 600, letterSpacing: "0.5px", textTransform: "uppercase" },
+  navDot: { position: "absolute", bottom: -2, width: 4, height: 4, borderRadius: "50%", background: "#00f5c0", boxShadow: "0 0 6px #00f5c0" },
+  badge: { position: "absolute", top: -4, right: -8, minWidth: 16, height: 16, borderRadius: 8, background: "#ef4444", color: "#fff", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" },
+  // Floating button
+  fab: { position: "fixed", bottom: 76, right: "calc(50% - 228px)", width: 48, height: 48, borderRadius: "50%", background: "linear-gradient(135deg,#00dba8,#1a6ee0)", border: "none", color: "#fff", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(0,219,168,0.5)", animation: "fabPulse 3s ease-in-out infinite", zIndex: 99 },
 };
