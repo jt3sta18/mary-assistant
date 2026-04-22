@@ -1468,7 +1468,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       </header>
 
       {/* Content */}
-      <main style={tab === "chat" ? {...S.main, padding: 0, overflowY: "hidden", display: "flex", flexDirection: "column"} : S.main}>
+      <main style={tab === "chat" ? {...S.main, padding: 0, paddingBottom: "calc(52px + env(safe-area-inset-bottom, 0px))", overflowY: "hidden", display: "flex", flexDirection: "column"} : S.main}>
 
         {/* ── TODAY ── */}
         {tab === "today" && (
@@ -1495,13 +1495,6 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               </div>
             )}
 
-            <div style={S.card}>
-              <div style={S.cHead}><div style={S.headDot} /><span style={S.cTitle}>Daily Briefing</span><button onClick={() => fetchBriefing(true)} style={S.refreshBtn} disabled={briefingLoading}>{briefingLoading ? "↻" : "↻ Refresh"}</button></div>
-              {briefingLoading
-                ? <div style={S.skelWrap}><div style={S.skel}/><div style={{...S.skel,width:"85%"}}/><div style={{...S.skel,width:"60%"}}/><div style={{...S.skel,width:"75%",marginTop:8}}/><div style={{...S.skel,width:"50%"}}/></div>
-                : <MarkdownText text={briefing} style={S.bText} />}
-            </div>
-
             {/* Bible Verse */}
             {verse && (
               <div style={S.verseCard}>
@@ -1523,6 +1516,13 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                 </div>
               </div>
             )}
+
+            <div style={S.card}>
+              <div style={S.cHead}><div style={S.headDot} /><span style={S.cTitle}>Daily Briefing</span><button onClick={() => fetchBriefing(true)} style={S.refreshBtn} disabled={briefingLoading}>{briefingLoading ? "↻" : "↻ Refresh"}</button></div>
+              {briefingLoading
+                ? <div style={S.skelWrap}><div style={S.skel}/><div style={{...S.skel,width:"85%"}}/><div style={{...S.skel,width:"60%"}}/><div style={{...S.skel,width:"75%",marginTop:8}}/><div style={{...S.skel,width:"50%"}}/></div>
+                : <MarkdownText text={briefing} style={S.bText} />}
+            </div>
 
             {/* Tomorrow Preview - shows after 5pm */}
             {(tomorrowPreview || (new Date().getHours() >= 17 && !tomorrowPreview && !tomorrowLoading)) && (
