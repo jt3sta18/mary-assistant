@@ -1726,6 +1726,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         {/* ── CHAT ── */}
         {tab === "chat" && (
           <div style={S.chatWrap}>
+            {/* ── Scrollable messages — fully independent ── */}
             <div style={S.chatScroll}>
               {!chat.length && (
                 <div style={S.chatEmpty}>
@@ -1755,45 +1756,43 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               )}
               <div ref={chatEnd} />
             </div>
-            {/* Hidden file input */}
-            <input ref={fileInputRef} type="file" accept=".csv,.txt" style={{display:"none"}} onChange={handleFileUpload} />
 
-            {/* Attach menu popup */}
-            {showAttachMenu && (
-              <div style={S.attachMenu} onMouseLeave={() => {}}>
-                <button onClick={() => { fileInputRef.current?.click(); setShowAttachMenu(false); }} style={S.attachOpt}>
-                  <span style={{fontSize:18}}>📎</span>
-                  <div><div style={{fontWeight:600,fontSize:13}}>Upload CSV</div><div style={{fontSize:11,color:"#7a96bc"}}>Import leads or data from a file</div></div>
-                </button>
-                <button onClick={openDrivePicker} style={S.attachOpt}>
-                  <span style={{fontSize:18}}>📊</span>
-                  <div><div style={{fontWeight:600,fontSize:13}}>Google Drive Sheet</div><div style={{fontSize:11,color:"#7a96bc"}}>Pick an existing spreadsheet</div></div>
-                </button>
-              </div>
-            )}
-
-            {/* File chip — shows when a file is attached */}
-            {attachedFile && (
-              <div style={S.fileChip}>
-                <span style={{fontSize:14}}>📄</span>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{attachedFile.name}</div>
-                  <div style={{fontSize:11,color:"#7a96bc"}}>{attachedFile.rows} rows</div>
+            {/* ── Input toolbar — pinned to bottom, never scrolls ── */}
+            <div style={S.chatBottom}>
+              <input ref={fileInputRef} type="file" accept=".csv,.txt" style={{display:"none"}} onChange={handleFileUpload} />
+              {showAttachMenu && (
+                <div style={S.attachMenu} onMouseLeave={() => {}}>
+                  <button onClick={() => { fileInputRef.current?.click(); setShowAttachMenu(false); }} style={S.attachOpt}>
+                    <span style={{fontSize:18}}>📎</span>
+                    <div><div style={{fontWeight:600,fontSize:13}}>Upload CSV</div><div style={{fontSize:11,color:"#7a96bc"}}>Import leads or data from a file</div></div>
+                  </button>
+                  <button onClick={openDrivePicker} style={S.attachOpt}>
+                    <span style={{fontSize:18}}>📊</span>
+                    <div><div style={{fontWeight:600,fontSize:13}}>Google Drive Sheet</div><div style={{fontSize:11,color:"#7a96bc"}}>Pick an existing spreadsheet</div></div>
+                  </button>
                 </div>
-                <button onClick={() => setAttachedFile(null)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.3)",cursor:"pointer",fontSize:14,padding:4}}>✕</button>
+              )}
+              {attachedFile && (
+                <div style={S.fileChip}>
+                  <span style={{fontSize:14}}>📄</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{attachedFile.name}</div>
+                    <div style={{fontSize:11,color:"#7a96bc"}}>{attachedFile.rows} rows</div>
+                  </div>
+                  <button onClick={() => setAttachedFile(null)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.3)",cursor:"pointer",fontSize:14,padding:4}}>✕</button>
+                </div>
+              )}
+              {chat.length > 0 && (
+                <div style={{display:"flex",justifyContent:"center",padding:"2px 16px 0"}}>
+                  <button onClick={() => { setChat([]); saveData("mary-chat", []); }} style={{fontSize:11,color:"rgba(255,255,255,0.18)",background:"none",border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",letterSpacing:"0.3px"}}>✕ New chat</button>
+                </div>
+              )}
+              <div style={S.chatBar}>
+                <button onClick={() => setShowAttachMenu((p) => !p)} style={{...S.sendBtn, background: showAttachMenu ? "rgba(52,168,83,0.2)" : "rgba(255,255,255,0.06)", color: showAttachMenu ? "#34a853" : "#7a96bc", boxShadow:"none", fontSize:16}} title="Attach file">📎</button>
+                <button onClick={startListening} style={{...S.sendBtn, background: isListening ? "#ef4444" : "rgba(255,255,255,0.06)", color: isListening ? "#fff" : "#7a96bc", boxShadow:"none", fontSize:16}} title="Voice input">🎤</button>
+                <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") sendMessage(); setShowAttachMenu(false); }} placeholder={isListening ? "Listening..." : attachedFile ? `Tell Mary what to do with ${attachedFile.name}...` : "Ask Mary anything..."} style={{...S.chatIn, borderColor: isListening ? "rgba(239,68,68,0.4)" : attachedFile ? "rgba(52,168,83,0.4)" : "rgba(255,255,255,0.10)"}} />
+                <button onClick={sendMessage} disabled={!input.trim() || loading} style={S.sendBtn}>↑</button>
               </div>
-            )}
-
-            {chat.length > 0 && (
-              <div style={{display:"flex",justifyContent:"center",padding:"2px 16px 0"}}>
-                <button onClick={() => { setChat([]); saveData("mary-chat", []); }} style={{fontSize:11,color:"rgba(255,255,255,0.18)",background:"none",border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",letterSpacing:"0.3px"}}>✕ New chat</button>
-              </div>
-            )}
-            <div style={S.chatBar}>
-              <button onClick={() => setShowAttachMenu((p) => !p)} style={{...S.sendBtn, background: showAttachMenu ? "rgba(52,168,83,0.2)" : "rgba(255,255,255,0.06)", color: showAttachMenu ? "#34a853" : "#7a96bc", boxShadow:"none", fontSize:16}} title="Attach file">📎</button>
-              <button onClick={startListening} style={{...S.sendBtn, background: isListening ? "#ef4444" : "rgba(255,255,255,0.06)", color: isListening ? "#fff" : "#7a96bc", boxShadow:"none", fontSize:16}} title="Voice input">🎤</button>
-              <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") sendMessage(); setShowAttachMenu(false); }} placeholder={isListening ? "Listening..." : attachedFile ? `Tell Mary what to do with ${attachedFile.name}...` : "Ask Mary anything..."} style={{...S.chatIn, borderColor: isListening ? "rgba(239,68,68,0.4)" : attachedFile ? "rgba(52,168,83,0.4)" : "rgba(255,255,255,0.10)"}} />
-              <button onClick={sendMessage} disabled={!input.trim() || loading} style={S.sendBtn}>↑</button>
             </div>
           </div>
         )}
@@ -1944,7 +1943,8 @@ const S = {
   hint: { fontSize: 12, color: "#7a96bc", padding: "8px 0 16px", lineHeight: 1.5, borderBottom: "1px solid rgba(255,255,255,0.05)", marginBottom: 16 },
   // Chat
   chatWrap: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 },
-  chatScroll: { flex: 1, overflowY: "auto", overflowX: "hidden", padding: "12px 16px 8px" },
+  chatScroll: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", padding: "12px 16px 8px" },
+  chatBottom: { flexShrink: 0, background: "rgba(6,14,30,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.05)" },
   chatEmpty: { textAlign: "center", padding: "24px 8px" },
   sug: { padding: "10px 14px", background: "rgba(16,31,58,0.7)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, color: "rgba(255,255,255,0.6)", fontSize: 13, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: "left", fontWeight: 400 },
   uMsg: { display: "flex", justifyContent: "flex-end", marginBottom: 12 },
@@ -1953,7 +1953,7 @@ const S = {
   uBub: { background: "linear-gradient(135deg, #00dba8, #1a6ee0)", color: "#fff", padding: "10px 14px", borderRadius: "18px 18px 4px 18px", fontSize: 14, maxWidth: "78%", lineHeight: 1.55, fontWeight: 500, wordBreak: "break-word", overflowWrap: "anywhere" },
   aBub: { background: "rgba(16,31,58,0.85)", backdropFilter: "blur(12px)", color: "rgba(255,255,255,0.85)", padding: "11px 14px", borderRadius: "18px 18px 18px 4px", fontSize: 14, maxWidth: "82%", lineHeight: 1.6, fontWeight: 300, border: "1px solid rgba(255,255,255,0.07)", wordBreak: "break-word", overflowWrap: "anywhere" },
   dot: { animation: "dotPulse 1s ease-in-out infinite", fontSize: 10, color: "#00dba8" },
-  chatBar: { display: "flex", gap: 8, padding: "10px 16px 12px", borderTop: "1px solid rgba(255,255,255,0.05)", background: "rgba(6,14,30,0.95)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", flexShrink: 0 },
+  chatBar: { display: "flex", gap: 8, padding: "10px 16px 12px", flexShrink: 0 },
   chatIn: { flex: 1, padding: "10px 14px", background: "rgba(16,31,58,0.8)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 14, color: "#fff", fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif", outline: "none", fontWeight: 300 },
   sendBtn: { width: 42, height: 42, background: "linear-gradient(135deg,#00dba8,#1a6ee0)", color: "#fff", border: "none", borderRadius: 14, fontSize: 18, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(0,219,168,0.3)" },
   // Google
