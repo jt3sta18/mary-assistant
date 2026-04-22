@@ -648,6 +648,8 @@ export default function Mary() {
   const chatEnd = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
+  const pipelineCacheRef = useRef(null);   // { leads: [...], ts: Date.now() }
+  const pipelineFetchingRef = useRef(false); // prevents duplicate in-flight fetches
 
   useEffect(() => {
     (async () => {
@@ -668,6 +670,11 @@ export default function Mary() {
       if (cachedTmr && cachedTmr.date === new Date().toDateString()) {
         setTomorrowPreview(cachedTmr.preview);
       }
+
+      // Pre-warm pipeline cache in background so lead lookups are instant
+      fetchOutboundLeads().then(leads => {
+        pipelineCacheRef.current = { leads, ts: Date.now() };
+      }).catch(() => {});
     })();
     if ("Notification" in window) setNotifPerm(Notification.permission);
 
@@ -924,7 +931,7 @@ export default function Mary() {
             const bookings = detectGHLBooking(emails);
             if (bookings.length > 0) {
               try {
-                const leads = await fetchOutboundLeads();
+                const leads = await getLeads();
                 for (const booking of bookings) {
                   const info = extractBookingInfo(booking);
                   const { name, email: prospectEmail, appointmentTime } = info;
@@ -1105,6 +1112,26 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
     setReminders((p) => [...p, { id: Date.now(), title, time, fired: false }]);
   }, []);
 
+  // Returns cached leads if fresh (< 5 min), otherwise fetches and updates cache
+  const getLeads = async () => {
+    const CACHE_TTL = 5 * 60 * 1000;
+    if (pipelineCacheRef.current && (Date.now() - pipelineCacheRef.current.ts) < CACHE_TTL) {
+      return pipelineCacheRef.current.leads;
+    }
+    if (!pipelineFetchingRef.current) {
+      pipelineFetchingRef.current = true;
+      try {
+        const leads = await fetchOutboundLeads();
+        pipelineCacheRef.current = { leads, ts: Date.now() };
+        return leads;
+      } finally {
+        pipelineFetchingRef.current = false;
+      }
+    }
+    // Another fetch is in progress — wait for it
+    return pipelineCacheRef.current?.leads || await fetchOutboundLeads();
+  };
+
   const sendMessage = async (overrideText) => {
     const msg = (typeof overrideText === "string" ? overrideText : input).trim();
     if (!msg || loading) return;
@@ -1161,7 +1188,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       const needsPipeline = pipelineKeywords.some((k) => msgLower.includes(k)) || hasProperName;
       if (needsPipeline) {
         try {
-          const leads = await fetchOutboundLeads();
+          const leads = await getLeads();
           const summary = buildPipelineSummary(leads);
           extra += `\n\n${summary}`;
 
@@ -1355,7 +1382,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       let linkedinNote = "";
       if (parsed.generate_linkedin?.search) {
         try {
-          const leads = await fetchOutboundLeads();
+          const leads = await getLeads();
           const lead = findLeadBySearch(leads, parsed.generate_linkedin.search);
           if (lead) {
             const prompt = buildLinkedInPrompt(lead);
@@ -1401,7 +1428,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
           let targetId = id;
           let targetName = search;
           if (!targetId && search) {
-            const leads = await fetchOutboundLeads();
+            const leads = await getLeads();
             const match = findLeadBySearch(leads, search);
             if (match) { targetId = match.id; targetName = match.company || match.full_name || search; }
           }
@@ -1425,7 +1452,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
             emailFindNote = `\n\n📧 **Email found:** ${result.email} *(${result.confidence}% confidence)*`;
             // Auto-update the lead in the sheet if we found the email
             if (first_name && last_name) {
-              const leads = await fetchOutboundLeads().catch(() => []);
+              const leads = await getLeads().catch(() => []);
               const match = findLeadBySearch(leads, `${first_name} ${last_name}`);
               if (match && !match.email) {
                 await updateOutboundLead(match.id, { email: result.email }).catch(() => {});
