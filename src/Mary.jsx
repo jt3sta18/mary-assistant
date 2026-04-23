@@ -129,7 +129,7 @@ RULES:
 When pipeline data is in the context, use it to answer questions accurately — counts, specific leads, stage breakdowns.
 When asked to update a lead's status (e.g. "move X to booked"), use update_lead with the company/person name as "search".
 When asked to research a bank or credit union (e.g. "get me the intel on FMS Bank"), use research_institution — this calls FDIC + AI and returns a full pre-call brief.
-When asked for someone's email, FIRST check the lead data provided in the conversation — the email field is included for every lead. Only use find_email if their email field is blank or missing in the sheet data.
+When asked for someone's email, FIRST check the lead data provided in the conversation — the email field is included for every lead in the compact list and in the full detail block. If you see "email:someone@example.com" in their lead data, return that. If their email field is blank or absent, say "their email isn't in the sheet yet" and offer to look it up with find_email. Never say a lead isn't in the pipeline if their name appears in the lead list.
 When asked to add a single lead (e.g. "add John Smith, CEO at FMS Bank in PA"), use add_lead with all available fields. Infer institution_type (Bank or Credit Union) from context. Classify persona from title: CEO/President→CEO, CMO/Marketing→CMO, Digital/Tech/CTO→Digital, Retail/Branch/Lending→Retail, Strategy/BizDev→Strategy, Product→Product.
 When a CSV file is attached and user asks to add/import the leads to the pipeline, set add_leads_bulk: true — the app will handle the column mapping and import automatically.
 When asked to draft LinkedIn outreach for a specific lead (e.g. "draft LinkedIn messages for Sarah at Citizens Bank"), use generate_linkedin with the lead's name or company as "search".
@@ -1285,7 +1285,8 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
           // Exception: if the query is clearly about searching Gmail MESSAGES (not looking up an email address),
           // skip pipeline matching so Claude searches Gmail instead.
           const isSearchingGmail = ["in gmail", "in my gmail", "search gmail", "search my email", "search my inbox", "emails with ", "emails from ", "messages from ", "find emails", "find my email"].some(k => msgLower.includes(k));
-          const words = msg.split(/\s+/).filter(w => w.length > 3);
+          // Strip punctuation (apostrophes etc) so "Ellen's" matches "Ellen"
+          const words = msg.split(/\s+/).map(w => w.replace(/[^a-zA-Z]/g, "")).filter(w => w.length > 3);
           const matching = !isSearchingGmail ? leads.filter(l => {
             const hay = `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase();
             return words.some(w => hay.includes(w.toLowerCase()));
