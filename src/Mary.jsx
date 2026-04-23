@@ -108,6 +108,7 @@ RULES:
   "message": "Your response text here",
   "tasks_to_add": [{"title": "task name", "due": "ISO date string or null", "priority": "high|medium|low"}],
   "tasks_to_complete": ["task title to mark done"],
+  "clear_reminders": "all | fired | [\"specific reminder title\"]",
   "calendar_events": [{"title": "event name", "start": "ISO datetime", "end": "ISO datetime", "location": "optional"}],
   "reminders": [{"title": "reminder text", "time": "ISO datetime string for when to fire the notification"}],
   "bible_verse": {"text": "The verse text", "reference": "Book Chapter:Verse"},
@@ -158,7 +159,8 @@ When the daily briefing is requested, ALWAYS include a "bible_verse" field with 
 When calendar events are provided, include the relevant ones in calendar_events in your response.
 When the user asks you to remind them at a specific time, include a "reminders" entry with the exact ISO datetime.
 If they say something vague like "remind me tomorrow morning", interpret that as 9:00 AM the next day.
-If they say "remind me in 30 minutes", calculate the exact time from now.`;
+If they say "remind me in 30 minutes", calculate the exact time from now.
+When the user asks to clear, dismiss, or remove alerts/reminders: use "clear_reminders" — set to "all" to clear everything, "fired" to clear only ones that already fired, or an array of titles to clear specific ones.`;
 
 async function callClaude(messages) {
   const body = { model: "claude-sonnet-4-20250514", max_tokens: 1500, system: buildSystemPrompt(), messages };
@@ -1366,6 +1368,16 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       if (parsed.calendar_events?.length) setEvents(parsed.calendar_events);
       if (parsed.reminders) parsed.reminders.forEach((r) => addReminder(r.title, r.time));
       if (parsed.bible_verse) setVerse(parsed.bible_verse);
+      // Clear reminders: "all" clears everything, "fired" clears only fired, array of titles clears matching
+      if (parsed.clear_reminders) {
+        if (parsed.clear_reminders === "all") {
+          setReminders([]);
+        } else if (parsed.clear_reminders === "fired") {
+          setReminders((p) => p.filter((r) => !r.fired));
+        } else if (Array.isArray(parsed.clear_reminders)) {
+          setReminders((p) => p.filter((r) => !parsed.clear_reminders.some((t) => r.title.toLowerCase().includes(t.toLowerCase()))));
+        }
+      }
       // Persist new memories to localStorage
       if (parsed.save_memory?.length) {
         const existing = JSON.parse(localStorage.getItem("mary-memories") || "[]");
