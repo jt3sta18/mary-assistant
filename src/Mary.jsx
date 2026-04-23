@@ -1144,11 +1144,16 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
     const leads = pipelineCacheRef.current?.leads;
     if (!leads?.length) return null;
     const msgL = msg.toLowerCase();
+
+    // ── Never intercept email/gmail/calendar/reminder queries ───────────
+    const isEmailQuery = ["email", "gmail", "inbox", "mail", "message", "unread", "sent", "search my", "find email", "from ", "subject", "thread", "correspondence", "reply", "remind", "calendar", "schedule", "meeting", "appointment"].some(k => msgL.includes(k));
+    if (isEmailQuery) return null;
+
     const STAGE_LABELS = { not_contacted:"Not Contacted", request_sent:"Request Sent", accepted_dm:"Accepted / DM Sent", following_up:"Following Up", replied_followup:"Replied / Follow Up", booked:"Booked", second_call:"2nd Call", not_interested:"Not Interested", closed:"Closed" };
     const fmtLead = l => `**${l.full_name || `${l.first_name} ${l.last_name}`.trim()}** — ${l.company}${l.title ? `, ${l.title}` : ""}${l.state ? ` (${l.state})` : ""} · Status: ${STAGE_LABELS[l.status] || l.status}${l.next_linkedin_followup_date ? ` · Follow-up: ${l.next_linkedin_followup_date}` : ""}`;
 
     // ── Name/company lookup ──────────────────────────────────────────────
-    const namePat = /\b(where is|what stage is|status of|find|look up|show me|tell me about|update on|check on|how is|pull up)\b/i;
+    const namePat = /\b(where is|what stage is|status of|look up|show me|tell me about|update on|check on|how is|pull up)\b/i;
     const properName = /\b[A-Z][a-z]+\s+[A-Z][a-z]+\b/.exec(msg);
     if (namePat.test(msg) || properName) {
       const words = msg.split(/\s+/).filter(w => w.length > 2);
@@ -1239,7 +1244,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
 
       if (calToken && calExpiry && Date.now() < parseInt(calExpiry)) {
         const needsCalendar = ["calendar", "schedule", "meeting", "event", "appointment", "today", "tomorrow", "week"].some((k) => msgLower.includes(k));
-        const needsEmail = ["email", "inbox", "gmail", "mail", "message", "unread", "sent", "last email", "search my", "find email", "from nilendu", "from andy", "from ellen", "from matt", "correspondence", "thread"].some((k) => msgLower.includes(k));
+        const needsEmail = ["email", "inbox", "gmail", "mail", "unread", "sent", "last email", "search my", "find email", "recent email", "correspondence", "thread", "did i hear", "any email", "from "].some((k) => msgLower.includes(k));
         try {
           const [calEvents, emails] = await Promise.all([
             needsCalendar ? fetchCalendarEvents(calToken, 3).catch(() => []) : Promise.resolve([]),
