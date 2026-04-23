@@ -132,8 +132,8 @@ PIPELINE RULES — follow these exactly:
 1. When a "Lead record" block is provided, that is the exact person being asked about. Answer directly and only from that record. Never list other leads.
 2. When "All leads" is provided, search it for the person/company and answer about them only. Do not dump the whole list.
 3. Search is case-insensitive and partial — "andy" matches "Andy Montgomery", "beverly" matches "Beverly Credit Union".
-4. BEFORE executing update_lead or delete_lead, always confirm in one line: "I'll update [Name]'s [field] from '[old]' to '[new]' — go ahead?" Then wait for confirmation before including the action in your response.
-5. Exception to rule 4: if the user already confirmed (said "yes", "go ahead", "do it", "confirm"), execute immediately without asking again.
+4. BEFORE executing update_lead or delete_lead, confirm in one line: "I'll delete [Name] from the pipeline — go ahead?" Do NOT include the update_lead or delete_lead JSON in this same response. Output only the confirmation question and stop.
+5. Exception to rule 4: if the user already confirmed in this message (said "yes", "go ahead", "do it", "confirmed", or similar), then include the action JSON immediately — do NOT ask again. ONE confirmation total, then act.
 6. Format contact info cleanly — label each field, not a raw data dump. For lists, show name + key detail only (scannable).
 7. If a contact isn't found in the injected data, say "I don't see [name] in the current pipeline data — they may not be added yet."
 When asked to update a lead's status (e.g. "move X to booked"), use update_lead.
@@ -420,8 +420,22 @@ function buildPipelineSummary(leads) {
 
 function findLeadBySearch(leads, query) {
   const q = query.toLowerCase();
+
+  // Words that are NOT name parts — used to gauge how many "name words" the query has
+  const NON_NAME = new Set([
+    "from","the","pipeline","please","their","about","with","that","this","what","have","does",
+    "lead","find","tell","update","delete","remove","add","note","status","email","call","book",
+    "move","show","look","pull","info","contact","them","him","her","his","its","they","who",
+    "yes","okay","sure","just","can","you","get","lets","please","deal","did","was","are"
+  ]);
+  // Count query words that look like real name parts (length > 2, not a known stop/action word)
+  const queryNameWordCount = q
+    .split(/\s+/)
+    .map(w => w.replace(/[^a-z]/g, ""))
+    .filter(w => w.length > 2 && !NON_NAME.has(w))
+    .length;
+
   // For each lead, count how many of their name/company words appear in the message.
-  // The lead whose name words best match the message wins.
   const scored = leads.map(l => {
     const nameWords = `${l.full_name || ""} ${l.first_name || ""} ${l.last_name || ""} ${l.company || ""}`
       .toLowerCase().split(/\s+/).map(w => w.replace(/[^a-z]/g, "")).filter(w => w.length > 2);
@@ -429,7 +443,14 @@ function findLeadBySearch(leads, query) {
     return { l, score };
   }).filter(x => x.score > 0).sort((a, b) => b.score - a.score);
 
-  return scored.length > 0 ? scored[0].l : null;
+  if (scored.length === 0) return null;
+
+  // Require score ≥ min(queryNameWordCount, 2) to prevent a partial last-name-only match
+  // when a full name was specified ("adam mitchell" must score 2 — David Mitchell scores only 1).
+  const minScore = Math.min(Math.max(queryNameWordCount, 1), 2);
+  if (scored[0].score < minScore) return null;
+
+  return scored[0].l;
 }
 
 async function addOutboundLead(lead) {
