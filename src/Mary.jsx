@@ -90,7 +90,7 @@ CAPABILITIES:
 - EMAIL: You CAN send real emails AND search Gmail. When asked to send an email, compose it and include "send_email". If the user asks for someone's email address (e.g. "what's Ellen's email?"), check the pipeline lead data first — the email field is included for every lead. Only use find_email if it's blank. If the user asks to search Gmail for messages/threads (e.g. "find my emails with Ellen", "search Gmail for Ellen"), use "search_gmail" — do NOT answer with pipeline data in that case.
 - MEMORY: When James tells you something important about himself, his business, a prospect, or a preference, include it in "save_memory" so you can remember it in future conversations.
 - GOOGLE DRIVE & SHEETS: You can create new Google Sheets and write data to existing ones. When a file is attached (CSV or Drive sheet data), it will appear in the conversation context as a table. Use "create_sheet" to create a new spreadsheet, or "write_to_sheet" to append data to an existing one. Always confirm what was written and how many rows.
-- FINOVEO PIPELINE (CRM): You have live access to the Finoveo outbound lead pipeline. When pipeline data is provided in the conversation context, use it to answer questions about leads, stages, and counts. You can update a lead's status or fields using "update_lead". You can trigger a full FDIC + AI research brief on any bank or credit union using "research_institution". You can find a lead's email using "find_email".
+- FINOVEO PIPELINE (CRM): You have full live access to the Finoveo outbound lead pipeline — the complete Google Sheet. The lead data is injected into every pipeline-related conversation. You can: query any lead by name or company, see their status/notes/email/score, update any field using "update_lead", add a note to a lead (it will be appended with a timestamp), delete a lead using "delete_lead", add a new lead using "add_lead", and research any institution using "research_institution".
 
 Pipeline stages (in order): not_contacted → request_sent → accepted_dm → following_up → replied_followup → booked → second_call → not_interested → closed
 Lead fields: id, first_name, last_name, full_name, email, title, company, institution_type, state, asset_size, status, persona, linkedin_step, lead_score, next_followup (next LinkedIn follow-up date), notes (activity notes/history for the lead)
@@ -118,7 +118,8 @@ RULES:
   "save_memory": ["concise fact to remember, written as a statement"],
   "create_sheet": {"title": "Sheet name", "values": [["Col A", "Col B"], ["row1a", "row1b"]]},
   "write_to_sheet": {"spreadsheetId": "sheet_id_here", "range": "Sheet1", "values": [["row1a", "row1b"]]},
-  "update_lead": {"search": "company or person name to find the lead", "updates": {"status": "booked", "notes": "optional note"}},
+  "update_lead": {"search": "company or person name to find the lead", "updates": {"status": "booked", "notes": "note text to append", "email": "optional", "title": "optional"}},
+  "delete_lead": {"search": "company or person name to delete"},
   "research_institution": {"name": "FMS Bank"},
   "find_email": {"first_name": "John", "last_name": "Smith", "company": "Citizens Bank", "domain": "citizensbank.com"},
   "add_lead": {"first_name": "Maria", "last_name": "Chen", "full_name": "Maria Chen", "title": "VP of Digital Banking", "company": "Rockland Trust", "institution_type": "Bank", "state": "MA", "linkedin_url": "", "asset_size": "", "email": "", "persona": "Digital"},
@@ -126,8 +127,12 @@ RULES:
   "generate_linkedin": {"search": "company or person name of lead in pipeline"}
 }
 
-When pipeline data is in the context, use it to answer questions accurately — counts, specific leads, stage breakdowns.
-When asked to update a lead's status (e.g. "move X to booked"), use update_lead with the company/person name as "search".
+When pipeline data is in the context, use it to answer any question accurately — counts, specific leads, stage breakdowns, notes, emails, scores.
+When asked about any person or company, look them up in the "All leads" list or "Full detail" block provided. Never say a lead isn't in the pipeline if their name appears in the data.
+When asked to update a lead's status (e.g. "move X to booked"), use update_lead.
+When asked to add a note to a contact (e.g. "add a note to Andy that we spoke today"), use update_lead with the note text — it will be appended automatically.
+When asked to delete or remove a lead, use delete_lead.
+When asked to update any field (email, title, status, notes), use update_lead with the relevant field in updates.
 When asked to research a bank or credit union (e.g. "get me the intel on FMS Bank"), use research_institution — this calls FDIC + AI and returns a full pre-call brief.
 When asked for someone's email, FIRST check the lead data provided in the conversation — the email field is included for every lead in the compact list and in the full detail block. If you see "email:someone@example.com" in their lead data, return that. If their email field is blank or absent, say "their email isn't in the sheet yet" and offer to look it up with find_email. Never say a lead isn't in the pipeline if their name appears in the lead list.
 When asked to add a single lead (e.g. "add John Smith, CEO at FMS Bank in PA"), use add_lead with all available fields. Infer institution_type (Bank or Credit Union) from context. Classify persona from title: CEO/President→CEO, CMO/Marketing→CMO, Digital/Tech/CTO→Digital, Retail/Branch/Lending→Retail, Strategy/BizDev→Strategy, Product→Product.
@@ -1264,11 +1269,16 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       }
 
       // ─── Finoveo Pipeline — smart injection: only when relevant ──────────
-      // Pipeline keywords OR a proper name → inject data. Otherwise skip entirely.
-      const pipelineKeywords = ["lead","pipeline","prospect","booked","outreach","outbound","stage","follow up","followup","follow-up","dm sent","second call","2nd call","not interested","crm","closed","request sent","accepted","where is","what stage","status of","update on","check on","any update","progress on","responded","pitched","due today","overdue","who have i","who did i","my leads","contacted","not contacted","asset","institution","bank","credit union","score","persona","notes","email address","their email","whose email"];
-      // Match "Ellen McGovern" OR just "Ellen" (single capitalized name)
+      const pipelineKeywords = ["lead","pipeline","prospect","booked","outreach","outbound","stage","follow up","followup","follow-up","dm sent","second call","2nd call","not interested","crm","closed","request sent","accepted","where is","what stage","status of","update on","check on","any update","progress on","responded","pitched","due today","overdue","who have i","who did i","my leads","contacted","not contacted","asset","institution","bank","credit union","score","persona","notes","email address","their email","whose email","add a note","append note","update note","delete lead","remove lead","move to","change status"];
+      // Check capitalized names (Ellen McGovern) OR match any word against cached lead names (handles lowercase "andy montgomery")
       const hasProperName = /\b[A-Z][a-z]{1,}(\s+[A-Z][a-z]{1,})?\b/.test(msg);
-      const needsPipeline = pipelineKeywords.some(k => msgLower.includes(k)) || hasProperName;
+      const cachedLeads = pipelineCacheRef.current?.leads || [];
+      const msgWords = msgLower.split(/\s+/).map(w => w.replace(/[^a-z]/g, "")).filter(w => w.length > 3);
+      const matchesLeadName = cachedLeads.some(l => {
+        const hay = `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase();
+        return msgWords.some(w => hay.includes(w) || (w.endsWith("s") && hay.includes(w.slice(0, -1))));
+      });
+      const needsPipeline = pipelineKeywords.some(k => msgLower.includes(k)) || hasProperName || matchesLeadName;
 
       try {
         if (needsPipeline) {
@@ -1532,20 +1542,54 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
           const { search, id, updates } = parsed.update_lead;
           let targetId = id;
           let targetName = search;
+          let existingLead = null;
           if (!targetId && search) {
             const leads = await getLeads();
             const match = findLeadBySearch(leads, search);
-            if (match) { targetId = match.id; targetName = match.company || match.full_name || search; }
+            if (match) { targetId = match.id; targetName = match.company || match.full_name || search; existingLead = match; }
           }
           if (targetId) {
-            await updateOutboundLead(targetId, updates);
-            pipelineCacheRef.current = null; // invalidate cache — next query gets fresh data
+            // If updating notes, append to existing notes with timestamp instead of overwriting
+            const finalUpdates = { ...updates };
+            if (updates.notes && existingLead?.notes) {
+              const ts = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+              finalUpdates.notes = `${existingLead.notes}\n[${ts}] ${updates.notes}`;
+            }
+            await updateOutboundLead(targetId, finalUpdates);
+            pipelineCacheRef.current = null;
             const newStatus = updates.status ? ` → **${PIPELINE_STAGES[updates.status] || updates.status}**` : "";
-            leadNote = `\n\n✅ **${targetName}** updated in Finoveo pipeline${newStatus}.`;
+            const noteAdded = updates.notes && !updates.status ? " — note added." : "";
+            leadNote = `\n\n✅ **${targetName}** updated in Finoveo pipeline${newStatus}${noteAdded}`;
           } else {
             leadNote = `\n\n⚠️ Couldn't find "${search}" in the pipeline — check the name and try again.`;
           }
         } catch { leadNote = "\n\n⚠️ Couldn't update the lead — check the outbound engine connection."; }
+      }
+
+      // ─── Delete Lead from Pipeline ───────────────────────────────────
+      if (parsed.delete_lead) {
+        try {
+          const { search, id } = parsed.delete_lead;
+          let targetId = id;
+          let targetName = search;
+          if (!targetId && search) {
+            const leads = await getLeads();
+            const match = findLeadBySearch(leads, search);
+            if (match) { targetId = match.id; targetName = match.full_name || match.company || search; }
+          }
+          if (targetId) {
+            const res = await fetch(`/api/sheets`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ scriptUrl: OUTBOUND_SCRIPT_URL, action: "deleteLead", id: targetId }),
+            });
+            await res.json();
+            pipelineCacheRef.current = null;
+            leadNote += `\n\n🗑️ **${targetName}** removed from Finoveo pipeline.`;
+          } else {
+            leadNote += `\n\n⚠️ Couldn't find "${search}" to delete — check the name.`;
+          }
+        } catch { leadNote += "\n\n⚠️ Couldn't delete the lead — check the outbound engine connection."; }
       }
 
       // ─── Find Email via Hunter ───────────────────────────────────────
