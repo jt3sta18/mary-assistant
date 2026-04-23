@@ -709,6 +709,7 @@ export default function Mary() {
   const fileInputRef = useRef(null);
   const pipelineCacheRef = useRef(null);   // { leads: [...], ts: Date.now() }
   const pipelineFetchingRef = useRef(false); // prevents duplicate in-flight fetches
+  const lastDiscussedLeadRef = useRef(null); // last lead specifically matched in a message
 
   useEffect(() => {
     (async () => {
@@ -1327,10 +1328,21 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
 
             const isSearchingGmail = ["in gmail", "in my gmail", "search gmail", "search my email", "search my inbox", "emails with ", "emails from ", "messages from ", "find emails", "find my email"].some(k => msgLower.includes(k));
 
+            // Detect pronoun-only references so we can resolve from context
+            const hasPronounRef = !isSearchingGmail && /\b(him|her|them|this person|that person|this lead|that lead|this contact|that contact)\b/.test(msgLower);
+
             // Try specific lead match first using fuzzy search on the full message
-            const specificMatch = !isSearchingGmail ? findLeadBySearch(leads, msgLower) : null;
+            let specificMatch = !isSearchingGmail ? findLeadBySearch(leads, msgLower) : null;
+
+            // If no name match but message uses a pronoun, resolve from the last discussed lead
+            if (!specificMatch && hasPronounRef && lastDiscussedLeadRef.current) {
+              // Re-fetch the freshest version of that lead from current leads array
+              specificMatch = leads.find(l => l.id === lastDiscussedLeadRef.current.id) || lastDiscussedLeadRef.current;
+            }
 
             if (specificMatch) {
+              // Remember this lead for future pronoun references
+              lastDiscussedLeadRef.current = specificMatch;
               // Specific person found — inject only their record, not the whole list
               extra += `\n\nLead record:\n${JSON.stringify({
                 id: specificMatch.id,
@@ -1351,13 +1363,24 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               }, null, 2)}`;
             } else {
               // No specific person — inject compact list for stage/count/general queries
+              // Cap at 200 leads / 40,000 chars to prevent token overflow
               const compact = l => {
                 const name = l.full_name || `${l.first_name} ${l.last_name}`.trim();
                 const due = l.next_linkedin_followup_date || "";
                 const email = l.email ? ` | ${l.email}` : "";
                 return `${name} | ${l.company} | ${l.title || ""} | ${l.state || ""} | ${l.status}${due ? " | due:" + due : ""}${email}`;
               };
-              extra += `\n\nAll leads:\n${leads.map(compact).join("\n")}`;
+              const compactLines = leads.map(compact);
+              const MAX_CHARS = 40000;
+              let listText = "";
+              for (const line of compactLines) {
+                if ((listText + "\n" + line).length > MAX_CHARS) {
+                  listText += `\n... (${leads.length - listText.split("\n").length + 1} more leads truncated)`;
+                  break;
+                }
+                listText += (listText ? "\n" : "") + line;
+              }
+              extra += `\n\nAll leads:\n${listText}`;
             }
           }
         }
@@ -1584,7 +1607,14 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
           if (!targetId && search) {
             const leads = await getLeads();
             const match = findLeadBySearch(leads, search);
-            if (match) { targetId = match.id; targetName = match.company || match.full_name || search; existingLead = match; }
+            if (match) {
+              targetId = match.id; targetName = match.company || match.full_name || search; existingLead = match;
+              lastDiscussedLeadRef.current = match;
+            } else if (lastDiscussedLeadRef.current) {
+              // Resolve pronoun/vague reference from last discussed lead
+              const last = lastDiscussedLeadRef.current;
+              targetId = last.id; targetName = last.company || last.full_name || search; existingLead = last;
+            }
           }
           if (targetId) {
             // If updating notes, append to existing notes with timestamp instead of overwriting
@@ -1613,7 +1643,17 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
           if (!targetId && search) {
             const leads = await getLeads();
             const match = findLeadBySearch(leads, search);
-            if (match) { targetId = match.id; targetName = match.full_name || match.company || search; }
+            if (match) {
+              targetId = match.id;
+              targetName = match.full_name || match.company || search;
+              lastDiscussedLeadRef.current = null; // clear after deletion
+            } else if (lastDiscussedLeadRef.current) {
+              // Resolve pronoun/vague reference from last discussed lead
+              const last = lastDiscussedLeadRef.current;
+              targetId = last.id;
+              targetName = last.full_name || last.company || search;
+              lastDiscussedLeadRef.current = null; // clear after deletion
+            }
           }
           if (targetId) {
             const res = await fetch(`/api/sheets`, {
