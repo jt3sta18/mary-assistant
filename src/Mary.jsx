@@ -90,7 +90,7 @@ CAPABILITIES:
 - EMAIL: You CAN send real emails AND search Gmail. When asked to send an email, compose it and include "send_email". If the user asks for someone's email address (e.g. "what's Ellen's email?"), check the pipeline lead data first — the email field is included for every lead. Only use find_email if it's blank. If the user asks to search Gmail for messages/threads (e.g. "find my emails with Ellen", "search Gmail for Ellen"), use "search_gmail" — do NOT answer with pipeline data in that case.
 - MEMORY: When James tells you something important about himself, his business, a prospect, or a preference, include it in "save_memory" so you can remember it in future conversations.
 - GOOGLE DRIVE & SHEETS: You can create new Google Sheets and write data to existing ones. When a file is attached (CSV or Drive sheet data), it will appear in the conversation context as a table. Use "create_sheet" to create a new spreadsheet, or "write_to_sheet" to append data to an existing one. Always confirm what was written and how many rows.
-- FINOVEO PIPELINE (CRM): You have full live access to the Finoveo outbound lead pipeline — the complete Google Sheet. The lead data is injected into every pipeline-related conversation. You can: query any lead by name or company, see their status/notes/email/score, update any field using "update_lead", add a note to a lead (it will be appended with a timestamp), delete a lead using "delete_lead", add a new lead using "add_lead", and research any institution using "research_institution".
+- FINOVEO PIPELINE (CRM): You have full live access to the Finoveo outbound lead pipeline — the complete Google Sheet, always freshly read. You can query any lead by name, company, or email; read any field (status, notes, email, follow-up date, score, etc.); update any field using "update_lead"; append notes using "update_lead" (notes are appended with timestamp, never overwritten unless asked); add leads with "add_lead"; delete leads with "delete_lead"; answer aggregate questions (counts by stage, overdue follow-ups, etc.).
 
 Pipeline stages (in order): not_contacted → request_sent → accepted_dm → following_up → replied_followup → booked → second_call → not_interested → closed
 Lead fields: id, first_name, last_name, full_name, email, title, company, institution_type, state, asset_size, status, persona, linkedin_step, lead_score, next_followup (next LinkedIn follow-up date), notes (activity notes/history for the lead)
@@ -127,9 +127,14 @@ RULES:
   "generate_linkedin": {"search": "company or person name of lead in pipeline"}
 }
 
-When pipeline data is in the context, use it to answer any question accurately — counts, specific leads, stage breakdowns, notes, emails, scores.
-When a "Lead record" block is provided, that IS the person being asked about — answer directly from that record. Never list other leads when asked about a specific person.
-When only "All leads" is provided and the user asks about a specific person, find them in the list and answer about them only.
+PIPELINE RULES — follow these exactly:
+1. When a "Lead record" block is provided, that is the exact person being asked about. Answer directly and only from that record. Never list other leads.
+2. When "All leads" is provided, search it for the person/company and answer about them only. Do not dump the whole list.
+3. Search is case-insensitive and partial — "andy" matches "Andy Montgomery", "beverly" matches "Beverly Credit Union".
+4. BEFORE executing update_lead or delete_lead, always confirm in one line: "I'll update [Name]'s [field] from '[old]' to '[new]' — go ahead?" Then wait for confirmation before including the action in your response.
+5. Exception to rule 4: if the user already confirmed (said "yes", "go ahead", "do it", "confirm"), execute immediately without asking again.
+6. Format contact info cleanly — label each field, not a raw data dump. For lists, show name + key detail only (scannable).
+7. If a contact isn't found in the injected data, say "I don't see [name] in the current pipeline data — they may not be added yet."
 When asked to update a lead's status (e.g. "move X to booked"), use update_lead.
 When asked to add a note to a contact (e.g. "add a note to Andy that we spoke today"), use update_lead with the note text — it will be appended automatically.
 When asked to delete or remove a lead, use delete_lead.
@@ -411,17 +416,20 @@ function buildPipelineSummary(leads) {
   return `Finoveo Pipeline — ${leads.length} total leads:\n${lines.join("\n")}`;
 }
 
+// Common words that are NOT contact names — filtered out before name matching
+const STOP_WORDS = new Set(["show","find","tell","about","what","their","notes","email","status","stage","where","look","pull","give","info","details","contact","please","could","would","can","the","and","for","his","her","from","with","have","that","this","they","update","delete","remove","add","move","change","mark","set","who","how","are","all","any","get","see","need","want","check","also","then"]);
+
 function findLeadBySearch(leads, query) {
-  const q = query.toLowerCase().trim();
-  const hay = l => `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase();
-  // 1. Exact substring match
-  let m = leads.find(l => hay(l).includes(q));
+  const hay = l => `${l.company} ${l.full_name} ${l.first_name} ${l.last_name} ${l.email || ""}`.toLowerCase();
+  // Strip punctuation and remove stop words to get name/company candidate words
+  const words = query.toLowerCase().split(/\s+/)
+    .map(w => w.replace(/[^a-z0-9@.]/g, ""))
+    .filter(w => w.length > 2 && !STOP_WORDS.has(w));
+  if (!words.length) return null;
+  // 1. All candidate words appear in the lead's fields
+  let m = leads.find(l => words.every(w => hay(l).includes(w)));
   if (m) return m;
-  // 2. All words must appear somewhere in the lead's fields (handles "andy" matching "Andrew (Andy)")
-  const words = q.split(/\s+/).map(w => w.replace(/[^a-z]/g, "")).filter(w => w.length > 2);
-  m = leads.find(l => words.every(w => hay(l).includes(w)));
-  if (m) return m;
-  // 3. Any single strong word matches (first/last name alone)
+  // 2. Any single strong word (4+ chars) matches — handles first name only queries
   return leads.find(l => words.some(w => w.length > 3 && hay(l).includes(w))) || null;
 }
 
@@ -1140,9 +1148,9 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
     setReminders((p) => [...p, { id: Date.now(), title, time, fired: false }]);
   }, []);
 
-  // Returns cached leads if fresh (< 5 min), otherwise fetches and updates cache
+  // Returns cached leads if fresh (< 60s), otherwise fetches fresh from sheet
   const getLeads = async () => {
-    const CACHE_TTL = 5 * 60 * 1000;
+    const CACHE_TTL = 60 * 1000;
     if (pipelineCacheRef.current && (Date.now() - pipelineCacheRef.current.ts) < CACHE_TTL) {
       return pipelineCacheRef.current.leads;
     }
