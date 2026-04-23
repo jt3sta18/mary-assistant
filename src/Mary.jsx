@@ -411,8 +411,17 @@ function buildPipelineSummary(leads) {
 }
 
 function findLeadBySearch(leads, query) {
-  const q = query.toLowerCase();
-  return leads.find(l => `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase().includes(q));
+  const q = query.toLowerCase().trim();
+  const hay = l => `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase();
+  // 1. Exact substring match
+  let m = leads.find(l => hay(l).includes(q));
+  if (m) return m;
+  // 2. All words must appear somewhere in the lead's fields (handles "andy" matching "Andrew (Andy)")
+  const words = q.split(/\s+/).map(w => w.replace(/[^a-z]/g, "")).filter(w => w.length > 2);
+  m = leads.find(l => words.every(w => hay(l).includes(w)));
+  if (m) return m;
+  // 3. Any single strong word matches (first/last name alone)
+  return leads.find(l => words.some(w => w.length > 3 && hay(l).includes(w))) || null;
 }
 
 async function addOutboundLead(lead) {
@@ -1268,17 +1277,19 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         } catch {}
       }
 
-      // ─── Finoveo Pipeline — smart injection: only when relevant ──────────
-      const pipelineKeywords = ["lead","pipeline","prospect","booked","outreach","outbound","stage","follow up","followup","follow-up","dm sent","second call","2nd call","not interested","crm","closed","request sent","accepted","where is","what stage","status of","update on","check on","any update","progress on","responded","pitched","due today","overdue","who have i","who did i","my leads","contacted","not contacted","asset","institution","bank","credit union","score","persona","notes","email address","their email","whose email","add a note","append note","update note","delete lead","remove lead","move to","change status"];
-      // Check capitalized names (Ellen McGovern) OR match any word against cached lead names (handles lowercase "andy montgomery")
+      // ─── Finoveo Pipeline — inject when relevant ──────────────────────
+      const pipelineKeywords = ["lead","pipeline","prospect","booked","outreach","outbound","stage","follow up","followup","follow-up","dm sent","second call","2nd call","not interested","crm","closed","request sent","accepted","where is","what stage","status of","update on","check on","any update","progress on","responded","pitched","due today","overdue","who have i","who did i","my leads","contacted","not contacted","asset","institution","bank","credit union","score","persona","notes","email address","their email","whose email","add a note","append note","update note","delete lead","remove lead","move to","change status","show me","find me","look up","tell me about","pull up","info on","details on","what about","how is","who is"];
       const hasProperName = /\b[A-Z][a-z]{1,}(\s+[A-Z][a-z]{1,})?\b/.test(msg);
+      // Check message words against cached lead names — works even when typed lowercase
       const cachedLeads = pipelineCacheRef.current?.leads || [];
       const msgWords = msgLower.split(/\s+/).map(w => w.replace(/[^a-z]/g, "")).filter(w => w.length > 3);
-      const matchesLeadName = cachedLeads.some(l => {
+      const matchesLeadName = cachedLeads.length > 0 && cachedLeads.some(l => {
         const hay = `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase();
         return msgWords.some(w => hay.includes(w) || (w.endsWith("s") && hay.includes(w.slice(0, -1))));
       });
-      const needsPipeline = pipelineKeywords.some(k => msgLower.includes(k)) || hasProperName || matchesLeadName;
+      // If cache is empty we can't check names — fetch anyway on any vague contact-sounding query
+      const looksLikeContactQuery = cachedLeads.length === 0 && msgWords.length >= 2 && !["email","gmail","calendar","remind","task","today","tomorrow","schedule","weather","what time","morning"].some(k => msgLower.includes(k));
+      const needsPipeline = pipelineKeywords.some(k => msgLower.includes(k)) || hasProperName || matchesLeadName || looksLikeContactQuery;
 
       try {
         if (needsPipeline) {
