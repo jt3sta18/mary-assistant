@@ -1250,42 +1250,30 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         } catch {}
       }
 
-      // ─── Finoveo Pipeline pre-fetch ──────────────────────────────────
-      // Trigger on specific pipeline terms OR a proper name (First Last pattern)
-      const pipelineKeywords = ["lead", "pipeline", "prospect", "booked", "outbound", "stage", "follow up", "followup", "dm sent", "second call", "not interested", "crm", "closed", "request sent", "accepted", "where is", "what stage", "status of", "update on", "check on", "any update", "progress on", "reply", "responded", "pitched", "due today", "overdue"];
-      const hasProperName = /\b[A-Z][a-z]{1,}\s+[A-Z][a-z]{1,}\b/.test(msg);
-      const needsPipeline = pipelineKeywords.some((k) => msgLower.includes(k)) || hasProperName;
-      if (needsPipeline) {
-        try {
-          const leads = await getLeads();
-          // Always include summary counts — cheap, always useful
+      // ─── Finoveo Pipeline — always inject so Mary has full context ──────
+      try {
+        const leads = await getLeads();
+        if (leads?.length) {
+          // Always include the stage summary
           extra += `\n\n${buildPipelineSummary(leads)}`;
 
-          // Check if user is asking about a specific person or company
-          const words = msg.split(/\s+/).filter(w => w.length > 2);
+          // Compact one-liner per lead — always included so Mary can answer any question
+          const compact = l => `${l.full_name || `${l.first_name} ${l.last_name}`.trim()} — ${l.company} (${l.status}${l.next_linkedin_followup_date ? ", due " + l.next_linkedin_followup_date : ""})`;
+          extra += `\n\nAll leads:\n${leads.map(compact).join("\n")}`;
+
+          // If user mentions a specific person/company, also inject full detail for those matches
+          const words = msg.split(/\s+/).filter(w => w.length > 3);
           const matching = leads.filter(l => {
             const hay = `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase();
-            return words.some(w => w.length > 3 && hay.includes(w.toLowerCase()));
+            return words.some(w => hay.includes(w.toLowerCase()));
           }).slice(0, 5);
-
           if (matching.length > 0) {
-            // Specific person/company — send full detail for matched leads only
             const slimLead = l => ({ id: l.id, name: l.full_name || `${l.first_name} ${l.last_name}`.trim(), company: l.company, title: l.title, state: l.state, status: l.status, email: l.email, asset_size: l.asset_size, institution_type: l.institution_type, persona: l.persona, linkedin_step: l.linkedin_step, next_followup: l.next_linkedin_followup_date, notes: l.notes });
-            extra += `\n\nMatched lead(s):\n${JSON.stringify(matching.map(slimLead), null, 2)}`;
-          } else {
-            // Stage or general query — compact one-liner per lead, no heavy JSON
-            const stageMap = { booked:"booked", "second call":"second_call", "2nd call":"second_call", "not interested":"not_interested", closed:"closed", "following up":"following_up", "request sent":"request_sent", "accepted":"accepted_dm", "dm sent":"accepted_dm", "replied":"replied_followup", "follow up":"following_up", "not contacted":"not_contacted" };
-            const askedStatuses = Object.entries(stageMap).filter(([k]) => msgLower.includes(k)).map(([,v]) => v);
-            const compact = l => `${l.full_name || `${l.first_name} ${l.last_name}`.trim()} — ${l.company} (${l.status}${l.next_linkedin_followup_date ? ", due " + l.next_linkedin_followup_date : ""})`;
-            if (askedStatuses.length > 0) {
-              const stageLeads = leads.filter(l => askedStatuses.includes(l.status));
-              extra += `\n\nLeads in ${askedStatuses.join("/")} (${stageLeads.length} total):\n${stageLeads.map(compact).join("\n")}`;
-            }
-            // General queries get summary only — no individual lead dump
+            extra += `\n\nFull detail for matched lead(s):\n${JSON.stringify(matching.map(slimLead), null, 2)}`;
           }
-        } catch (e) {
-          extra += `\n\n⚠️ Could not load pipeline data: ${e.message}`;
         }
+      } catch (e) {
+        extra += `\n\n⚠️ Could not load pipeline data: ${e.message}`;
       }
 
       if (extra) {
