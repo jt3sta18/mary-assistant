@@ -8,6 +8,7 @@ export default async function handler(req, res) {
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: "ANTHROPIC_API_KEY not configured" });
+  const keyHint = apiKey ? `${apiKey.slice(0, 20)}...` : "missing";
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -21,6 +22,9 @@ export default async function handler(req, res) {
     });
 
     const data = await response.json();
+    if (!response.ok) {
+      return res.status(response.status).json({ ...data, _keyHint: keyHint });
+    }
     return res.status(response.status).json(data);
   } catch (err) {
     return res.status(500).json({ error: err.message });
