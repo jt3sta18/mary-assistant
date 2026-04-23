@@ -1341,7 +1341,13 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
             needsEmail ? fetchGmailEmails(calToken).catch(() => []) : Promise.resolve([]),
           ]);
           if (calEvents.length > 0) extra += `\n\nGoogle Calendar events (next 3 days):\n${JSON.stringify(calEvents, null, 2)}`;
-          if (emails.length > 0) extra += `\n\nUnread work emails:\n${JSON.stringify(emails, null, 2)}`;
+          if (emails.length > 0) {
+            // Compact format — trim snippets to 200 chars to avoid token bloat
+            const emailLines = emails.map(e =>
+              `From: ${e.from}\nSubject: ${e.subject}\nDate: ${e.date}\nSnippet: ${(e.snippet || "").slice(0, 200)}`
+            ).join("\n---\n");
+            extra += `\n\nUnread work emails:\n${emailLines}`;
+          }
         } catch {}
       }
 
@@ -1365,17 +1371,18 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
           if (leads?.length) {
             extra += `\n\n${buildPipelineSummary(leads)}`;
 
-            const isSearchingGmail = ["in gmail", "in my gmail", "search gmail", "search my email", "search my inbox", "emails with ", "emails from ", "messages from ", "find emails", "find my email"].some(k => msgLower.includes(k));
+            // Gmail-focused queries: searching/drafting based on email threads
+            const isSearchingGmail = ["in gmail", "in my gmail", "search gmail", "search my email", "search my inbox", "emails with ", "emails from ", "messages from ", "find emails", "find my email", "message i sent", "email i sent", "sent him", "sent her", "sent them", "draft", "follow up email", "follow-up email"].some(k => msgLower.includes(k));
 
             // Detect pronoun-only references so we can resolve from context
-            const hasPronounRef = !isSearchingGmail && /\b(him|her|them|this person|that person|this lead|that lead|this contact|that contact)\b/.test(msgLower);
+            const hasPronounRef = /\b(him|her|them|this person|that person|this lead|that lead|this contact|that contact)\b/.test(msgLower);
 
-            // Try specific lead match first using fuzzy search on the full message
-            let specificMatch = !isSearchingGmail ? findLeadBySearch(leads, msgLower) : null;
+            // Always try to find a specific lead — even on Gmail queries, the record
+            // gives useful context (email address, company) without the bulk of the full list
+            let specificMatch = findLeadBySearch(leads, msgLower);
 
             // If no name match but message uses a pronoun, resolve from the last discussed lead
             if (!specificMatch && hasPronounRef && lastDiscussedLeadRef.current) {
-              // Re-fetch the freshest version of that lead from current leads array
               specificMatch = leads.find(l => l.id === lastDiscussedLeadRef.current.id) || lastDiscussedLeadRef.current;
             }
 
@@ -1400,9 +1407,10 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                 linkedin_url: specificMatch.linkedin_url || "",
                 notes: specificMatch.notes || "",
               }, null, 2)}`;
-            } else {
-              // No specific person — inject compact list for stage/count/general queries
-              // Cap at 200 leads / 40,000 chars to prevent token overflow
+            } else if (!isSearchingGmail) {
+              // No specific person and not a Gmail task — inject compact list for
+              // stage/count/general pipeline queries. Skip this for Gmail queries
+              // to avoid combining a large lead list with email data (token overflow).
               const compact = l => {
                 const name = l.full_name || `${l.first_name} ${l.last_name}`.trim();
                 const due = l.next_linkedin_followup_date || "";
