@@ -87,7 +87,7 @@ CAPABILITIES:
 - CALENDAR: Analyze provided calendar events, spot conflicts, find free time, list upcoming meetings. You CAN create real calendar events — use "create_events" in your response and they will be added to Google Calendar automatically.
 - TASKS: Create, complete, and manage the user's task list.
 - REMINDERS: Set timed push notifications.
-- EMAIL: You CAN send real emails AND search Gmail. When asked to send an email, compose it and include "send_email". When asked to search Gmail or find a past email (e.g. "last email from John", "find email about the meeting"), use "search_gmail" with a Gmail search query string — the app will search and return the results to you.
+- EMAIL: You CAN send real emails AND search Gmail. When asked to send an email, compose it and include "send_email". When the user asks to search Gmail, find an email, or mentions "email from [person]" / "emails with [person]" — ALWAYS use "search_gmail" and respond with the email results. NEVER answer a Gmail search request with pipeline/lead data — those are completely separate. Gmail = search_gmail. Pipeline = lead list data.
 - MEMORY: When James tells you something important about himself, his business, a prospect, or a preference, include it in "save_memory" so you can remember it in future conversations.
 - GOOGLE DRIVE & SHEETS: You can create new Google Sheets and write data to existing ones. When a file is attached (CSV or Drive sheet data), it will appear in the conversation context as a table. Use "create_sheet" to create a new spreadsheet, or "write_to_sheet" to append data to an existing one. Always confirm what was written and how many rows.
 - FINOVEO PIPELINE (CRM): You have live access to the Finoveo outbound lead pipeline. When pipeline data is provided in the conversation context, use it to answer questions about leads, stages, and counts. You can update a lead's status or fields using "update_lead". You can trigger a full FDIC + AI research brief on any bank or credit union using "research_institution". You can find a lead's email using "find_email".
@@ -140,7 +140,7 @@ When creating or writing to a sheet, structure the values as a 2D array — firs
 
 Only include fields that are relevant. "message" is always required. Others are optional.
 When the user asks you to send an email, compose it and include a "send_email" field — the system sends it automatically via Gmail.
-When the user asks to search Gmail, find an old email, or look up correspondence with someone, use "search_gmail" with a proper Gmail query string (e.g. "from:nilendu", "from:ellen subject:finoveo", "to:me newer_than:7d"). The system will execute the search and return the results. Use this any time the user references a past email or conversation thread.
+When the user asks to search Gmail, find an old email, or mentions "emails with [person]" / "email from [person]", ALWAYS use "search_gmail" with a proper Gmail query string (e.g. "from:ellen", "from:nilendu", "subject:finoveo newer_than:30d"). The system will execute the search and return results. This is completely separate from the pipeline — a name appearing in both Gmail and the pipeline does not mean you should answer with pipeline data.
 When the user asks you to create or schedule a calendar event, include it in "create_events" — the system will add it to Google Calendar automatically. Always confirm what you scheduled in your message.
 When emails are provided in the briefing, scan them for action items and include up to 3 proactive task suggestions in "suggested_tasks" — things the user probably needs to do based on the emails.
 When the daily briefing is requested, ALWAYS include a "bible_verse" field with an inspiring verse for the day. Choose a different verse each day — draw from the full Catholic and Orthodox biblical canon, including the Deuterocanonical books (Sirach, Wisdom, Tobit, Judith, Baruch, 1 & 2 Maccabees). Vary across the Psalms, Proverbs, Gospels, Epistles, Old Testament prophets, and Deuterocanonical wisdom literature. Stay faithful to Catholic and Orthodox tradition. The user's faith is deeply important to them. IMPORTANT: Do NOT include the bible verse inside the "message" text — it is displayed in its own dedicated card. Keep the briefing message focused on schedule, tasks, and business context only.
@@ -1281,12 +1281,14 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
           };
           extra += `\n\nComplete lead list (name | company | title | type | state | status | due | email | score | assets):\n${leads.map(compact).join("\n")}`;
 
-          // For any specific person/company mentioned, inject full detail including notes
+          // For any specific person/company mentioned (but NOT email/gmail queries — those go to Gmail),
+          // inject full lead detail including notes
+          const isGmailQuery = ["gmail", "email", "inbox", "mail", "sent", "thread", "correspondence", "search my", "find email", "recent email", "from "].some(k => msgLower.includes(k));
           const words = msg.split(/\s+/).filter(w => w.length > 3);
-          const matching = leads.filter(l => {
+          const matching = !isGmailQuery ? leads.filter(l => {
             const hay = `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase();
             return words.some(w => hay.includes(w.toLowerCase()));
-          }).slice(0, 5);
+          }).slice(0, 5) : [];
           if (matching.length > 0) {
             const fullLead = l => ({
               id: l.id,
