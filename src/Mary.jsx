@@ -1809,6 +1809,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                   <div style={{display:"flex",gap:8}}>
                     <button onClick={() => { setReplyingTo(i); setReplyText(""); }} style={{...S.gcBtn, fontSize:11, padding:"5px 12px"}}>↩ Reply</button>
                     <button onClick={() => { setTab("chat"); setTimeout(() => { setInput(`Draft a reply to ${email.from?.replace(/<.*>/, "").trim()} about: "${email.subject}"`); inputRef.current?.focus(); }, 100); }} style={{...S.gcBtn, fontSize:11, padding:"5px 12px", background:"rgba(56,170,255,0.15)", color:"#38aaff"}}>✦ Ask Mary</button>
+                    <button onClick={() => setInboxEmails(p => p.filter((_, idx) => idx !== i))} style={{...S.gcBtn, fontSize:11, padding:"5px 12px", background:"rgba(255,255,255,0.04)", color:"#7a96bc", border:"1px solid rgba(255,255,255,0.08)", marginLeft:"auto"}}>✕ Dismiss</button>
                   </div>
                 )}
               </div>
