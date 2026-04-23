@@ -418,27 +418,18 @@ function buildPipelineSummary(leads) {
   return `Finoveo Pipeline — ${leads.length} total leads:\n${lines.join("\n")}`;
 }
 
-// Words that are never contact names — filtered before matching
-const STOP_WORDS = new Set(["show","find","tell","about","what","their","notes","email","status","stage","where","look","pull","give","info","details","contact","please","could","would","can","the","and","for","his","her","from","with","have","that","this","they","update","delete","remove","add","move","change","mark","set","who","how","are","all","any","get","see","need","want","check","also","then","just","into","been","will","does","lead","leads","pipeline","prospect","booked","replied","follow","following","contacted","accepted","closed","second","call","interested","request","sent","stage","status","crm","outbound"]);
-
 function findLeadBySearch(leads, query) {
-  const hay = l => `${l.company} ${l.full_name} ${l.first_name} ${l.last_name} ${l.email || ""}`.toLowerCase();
-  const words = query.toLowerCase().split(/\s+/)
-    .map(w => w.replace(/[^a-z0-9@.]/g, ""))
-    .filter(w => w.length > 2 && !STOP_WORDS.has(w));
-  if (!words.length) return null;
+  const q = query.toLowerCase();
+  // For each lead, count how many of their name/company words appear in the message.
+  // The lead whose name words best match the message wins.
+  const scored = leads.map(l => {
+    const nameWords = `${l.full_name || ""} ${l.first_name || ""} ${l.last_name || ""} ${l.company || ""}`
+      .toLowerCase().split(/\s+/).map(w => w.replace(/[^a-z]/g, "")).filter(w => w.length > 2);
+    const score = nameWords.filter(w => q.includes(w)).length;
+    return { l, score };
+  }).filter(x => x.score > 0).sort((a, b) => b.score - a.score);
 
-  // Score every lead by how many query words appear in their fields
-  // Best match wins — prevents "David Mitchell" beating "Adam Mitchell" when you said "adam mitchell"
-  const scored = leads
-    .map(l => ({ l, score: words.filter(w => hay(l).includes(w)).length }))
-    .filter(x => x.score > 0)
-    .sort((a, b) => b.score - a.score);
-
-  if (!scored.length) return null;
-  // Require at least 2 matching words if query has multiple words, otherwise accept 1
-  const best = scored[0];
-  return (best.score >= 2 || words.length === 1) ? best.l : null;
+  return scored.length > 0 ? scored[0].l : null;
 }
 
 async function addOutboundLead(lead) {
