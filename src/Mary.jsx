@@ -128,7 +128,8 @@ RULES:
 }
 
 When pipeline data is in the context, use it to answer any question accurately — counts, specific leads, stage breakdowns, notes, emails, scores.
-When asked about any person or company, look them up in the "All leads" list or "Full detail" block provided. Never say a lead isn't in the pipeline if their name appears in the data.
+When a "Lead record" block is provided, that IS the person being asked about — answer directly from that record. Never list other leads when asked about a specific person.
+When only "All leads" is provided and the user asks about a specific person, find them in the list and answer about them only.
 When asked to update a lead's status (e.g. "move X to booked"), use update_lead.
 When asked to add a note to a contact (e.g. "add a note to Andy that we spoke today"), use update_lead with the note text — it will be appended automatically.
 When asked to delete or remove a lead, use delete_lead.
@@ -1295,55 +1296,44 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         if (needsPipeline) {
           const leads = await getLeads();
           if (leads?.length) {
-            // Always include the stage summary
             extra += `\n\n${buildPipelineSummary(leads)}`;
 
-            // Full compact lead list — one rich line per lead
-            const compact = l => {
-              const name = l.full_name || `${l.first_name} ${l.last_name}`.trim();
-              const due = l.next_linkedin_followup_date || l.next_followup || "";
-              const score = l.lead_score ? ` score:${l.lead_score}` : "";
-              const assets = l.asset_size ? ` assets:${l.asset_size}` : "";
-              const email = l.email ? ` email:${l.email}` : "";
-              return `${name} | ${l.company} | ${l.title || ""} | ${l.institution_type || ""} | ${l.state || ""} | ${l.status}${due ? " | due:" + due : ""}${email}${score}${assets}`;
-            };
-            extra += `\n\nAll leads (name | company | title | type | state | status | due | email | score | assets):\n${leads.map(compact).join("\n")}`;
-
-            // For specific person/company mentioned, inject full detail including notes.
-            // Skip if clearly a Gmail message search (not an email address lookup).
             const isSearchingGmail = ["in gmail", "in my gmail", "search gmail", "search my email", "search my inbox", "emails with ", "emails from ", "messages from ", "find emails", "find my email"].some(k => msgLower.includes(k));
-            // Strip punctuation; also handle possessives: "Ellen's"→"Ellens"→try "Ellen" too
-            const words = msg.split(/\s+/).map(w => w.replace(/[^a-zA-Z]/g, "")).filter(w => w.length > 2);
-            const matching = !isSearchingGmail ? leads.filter(l => {
-              const hay = `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase();
-              return words.some(w => {
-                const wl = w.toLowerCase();
-                return hay.includes(wl) || (wl.endsWith("s") && wl.length > 3 && hay.includes(wl.slice(0, -1)));
-              });
-            }).slice(0, 5) : [];
-          if (matching.length > 0) {
-            const fullLead = l => ({
-              id: l.id,
-              name: l.full_name || `${l.first_name} ${l.last_name}`.trim(),
-              company: l.company,
-              title: l.title,
-              state: l.state,
-              status: l.status,
-              email: l.email,
-              asset_size: l.asset_size,
-              institution_type: l.institution_type,
-              persona: l.persona,
-              linkedin_step: l.linkedin_step,
-              next_followup: l.next_linkedin_followup_date,
-              lead_score: l.lead_score,
-              linkedin_url: l.linkedin_url,
-              linkedin_about: l.linkedin_about,
-              notes: l.notes || "",
-            });
-            extra += `\n\nFull detail — matched lead(s):\n${JSON.stringify(matching.map(fullLead), null, 2)}`;
+
+            // Try specific lead match first using fuzzy search on the full message
+            const specificMatch = !isSearchingGmail ? findLeadBySearch(leads, msgLower) : null;
+
+            if (specificMatch) {
+              // Specific person found — inject only their record, not the whole list
+              extra += `\n\nLead record:\n${JSON.stringify({
+                id: specificMatch.id,
+                name: specificMatch.full_name || `${specificMatch.first_name} ${specificMatch.last_name}`.trim(),
+                company: specificMatch.company,
+                title: specificMatch.title || "",
+                state: specificMatch.state || "",
+                status: specificMatch.status,
+                email: specificMatch.email || "",
+                asset_size: specificMatch.asset_size || "",
+                institution_type: specificMatch.institution_type || "",
+                persona: specificMatch.persona || "",
+                linkedin_step: specificMatch.linkedin_step || 0,
+                next_followup: specificMatch.next_linkedin_followup_date || "",
+                lead_score: specificMatch.lead_score || 0,
+                linkedin_url: specificMatch.linkedin_url || "",
+                notes: specificMatch.notes || "",
+              }, null, 2)}`;
+            } else {
+              // No specific person — inject compact list for stage/count/general queries
+              const compact = l => {
+                const name = l.full_name || `${l.first_name} ${l.last_name}`.trim();
+                const due = l.next_linkedin_followup_date || "";
+                const email = l.email ? ` | ${l.email}` : "";
+                return `${name} | ${l.company} | ${l.title || ""} | ${l.state || ""} | ${l.status}${due ? " | due:" + due : ""}${email}`;
+              };
+              extra += `\n\nAll leads:\n${leads.map(compact).join("\n")}`;
+            }
           }
         }
-      }
       } catch (e) {
         extra += `\n\n⚠️ Could not load pipeline data: ${e.message}`;
       }
