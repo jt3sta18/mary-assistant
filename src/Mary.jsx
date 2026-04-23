@@ -418,21 +418,27 @@ function buildPipelineSummary(leads) {
   return `Finoveo Pipeline — ${leads.length} total leads:\n${lines.join("\n")}`;
 }
 
-// Common words that are NOT contact names — filtered out before name matching
-const STOP_WORDS = new Set(["show","find","tell","about","what","their","notes","email","status","stage","where","look","pull","give","info","details","contact","please","could","would","can","the","and","for","his","her","from","with","have","that","this","they","update","delete","remove","add","move","change","mark","set","who","how","are","all","any","get","see","need","want","check","also","then"]);
+// Words that are never contact names — filtered before matching
+const STOP_WORDS = new Set(["show","find","tell","about","what","their","notes","email","status","stage","where","look","pull","give","info","details","contact","please","could","would","can","the","and","for","his","her","from","with","have","that","this","they","update","delete","remove","add","move","change","mark","set","who","how","are","all","any","get","see","need","want","check","also","then","just","into","been","will","does","lead","leads","pipeline","prospect","booked","replied","follow","following","contacted","accepted","closed","second","call","interested","request","sent","stage","status","crm","outbound"]);
 
 function findLeadBySearch(leads, query) {
   const hay = l => `${l.company} ${l.full_name} ${l.first_name} ${l.last_name} ${l.email || ""}`.toLowerCase();
-  // Strip punctuation and remove stop words to get name/company candidate words
   const words = query.toLowerCase().split(/\s+/)
     .map(w => w.replace(/[^a-z0-9@.]/g, ""))
     .filter(w => w.length > 2 && !STOP_WORDS.has(w));
   if (!words.length) return null;
-  // 1. All candidate words appear in the lead's fields
-  let m = leads.find(l => words.every(w => hay(l).includes(w)));
-  if (m) return m;
-  // 2. Any single strong word (4+ chars) matches — handles first name only queries
-  return leads.find(l => words.some(w => w.length > 3 && hay(l).includes(w))) || null;
+
+  // Score every lead by how many query words appear in their fields
+  // Best match wins — prevents "David Mitchell" beating "Adam Mitchell" when you said "adam mitchell"
+  const scored = leads
+    .map(l => ({ l, score: words.filter(w => hay(l).includes(w)).length }))
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (!scored.length) return null;
+  // Require at least 2 matching words if query has multiple words, otherwise accept 1
+  const best = scored[0];
+  return (best.score >= 2 || words.length === 1) ? best.l : null;
 }
 
 async function addOutboundLead(lead) {
