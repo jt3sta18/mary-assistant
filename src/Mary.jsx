@@ -353,7 +353,13 @@ function parseResponse(text) {
 // in parallel — 100% sheet coverage, no CORS issues, no sampling gaps.
 
 async function fetchOutboundLeads() {
-  const normalize = l => ({ ...l, lead_score: parseInt(l.lead_score) || 0, linkedin_step: parseInt(l.linkedin_step) || 0 });
+  const normalize = l => ({
+    ...l,
+    lead_score: parseInt(l.lead_score) || 0,
+    linkedin_step: parseInt(l.linkedin_step) || 0,
+    // Normalize status to lowercase so stage matching always works
+    status: (l.status || "not_contacted").toLowerCase().trim().replace(/\s+/g, "_"),
+  });
   const res = await fetch("/api/pipeline");
   if (!res.ok) throw new Error("Pipeline fetch failed");
   const data = await res.json();
@@ -1139,11 +1145,13 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
     return pipelineCacheRef.current?.leads || await fetchOutboundLeads();
   };
 
-  // ─── Local pipeline lookup — zero API cost, pure JS like the dashboard ──
-  const localPipelineLookup = async (msg) => {
+  // ─── Local pipeline lookup — disabled, Claude handles all queries with injected data ──
+  const localPipelineLookup = async (_msg) => {
+    return null; // always fall through to Claude who has full sheet data injected
+
     const leads = pipelineCacheRef.current?.leads;
     if (!leads?.length) return null;
-    const msgL = msg.toLowerCase();
+    const msgL = _msg.toLowerCase();
 
     // ── Never intercept email/gmail/calendar/reminder queries ───────────
     const isEmailQuery = ["email", "gmail", "inbox", "mail", "message", "unread", "sent", "search my", "find email", "from ", "subject", "thread", "correspondence", "reply", "remind", "calendar", "schedule", "meeting", "appointment"].some(k => msgL.includes(k));
@@ -1255,26 +1263,32 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         } catch {}
       }
 
-      // ─── Finoveo Pipeline — always inject so Mary has full context ──────
+      // ─── Finoveo Pipeline — always inject full data so Mary can answer anything ──
       try {
         const leads = await getLeads();
         if (leads?.length) {
-          // Always include the stage summary
+          // Stage summary
           extra += `\n\n${buildPipelineSummary(leads)}`;
 
-          // Compact one-liner per lead — always included so Mary can answer any question
-          const compact = l => `${l.full_name || `${l.first_name} ${l.last_name}`.trim()} — ${l.company} (${l.status}${l.next_linkedin_followup_date ? ", due " + l.next_linkedin_followup_date : ""})`;
-          extra += `\n\nAll leads:\n${leads.map(compact).join("\n")}`;
+          // Full lead list — one rich line per lead so Claude can reason about any question
+          const compact = l => {
+            const name = l.full_name || `${l.first_name} ${l.last_name}`.trim();
+            const due = l.next_linkedin_followup_date || l.next_followup || "";
+            const score = l.lead_score ? ` score:${l.lead_score}` : "";
+            const assets = l.asset_size ? ` assets:${l.asset_size}` : "";
+            return `${name} | ${l.company} | ${l.title || ""} | ${l.institution_type || ""} | ${l.state || ""} | ${l.status}${due ? " | due:" + due : ""}${score}${assets}`;
+          };
+          extra += `\n\nComplete lead list (name | company | title | type | state | status | due | score | assets):\n${leads.map(compact).join("\n")}`;
 
-          // If user mentions a specific person/company, also inject full detail for those matches
+          // For specific person/company mentioned, inject full JSON detail
           const words = msg.split(/\s+/).filter(w => w.length > 3);
           const matching = leads.filter(l => {
             const hay = `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase();
             return words.some(w => hay.includes(w.toLowerCase()));
           }).slice(0, 5);
           if (matching.length > 0) {
-            const slimLead = l => ({ id: l.id, name: l.full_name || `${l.first_name} ${l.last_name}`.trim(), company: l.company, title: l.title, state: l.state, status: l.status, email: l.email, asset_size: l.asset_size, institution_type: l.institution_type, persona: l.persona, linkedin_step: l.linkedin_step, next_followup: l.next_linkedin_followup_date, notes: l.notes });
-            extra += `\n\nFull detail for matched lead(s):\n${JSON.stringify(matching.map(slimLead), null, 2)}`;
+            const slimLead = l => ({ id: l.id, name: l.full_name || `${l.first_name} ${l.last_name}`.trim(), company: l.company, title: l.title, state: l.state, status: l.status, email: l.email, asset_size: l.asset_size, institution_type: l.institution_type, persona: l.persona, linkedin_step: l.linkedin_step, next_followup: l.next_linkedin_followup_date, lead_score: l.lead_score, notes: l.notes });
+            extra += `\n\nFull detail — matched lead(s):\n${JSON.stringify(matching.map(slimLead), null, 2)}`;
           }
         }
       } catch (e) {
