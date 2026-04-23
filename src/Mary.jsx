@@ -1266,7 +1266,8 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       // ─── Finoveo Pipeline — smart injection: only when relevant ──────────
       // Pipeline keywords OR a proper name → inject data. Otherwise skip entirely.
       const pipelineKeywords = ["lead","pipeline","prospect","booked","outreach","outbound","stage","follow up","followup","follow-up","dm sent","second call","2nd call","not interested","crm","closed","request sent","accepted","where is","what stage","status of","update on","check on","any update","progress on","responded","pitched","due today","overdue","who have i","who did i","my leads","contacted","not contacted","asset","institution","bank","credit union","score","persona","notes","email address","their email","whose email"];
-      const hasProperName = /\b[A-Z][a-z]{1,}\s+[A-Z][a-z]{1,}\b/.test(msg);
+      // Match "Ellen McGovern" OR just "Ellen" (single capitalized name)
+      const hasProperName = /\b[A-Z][a-z]{1,}(\s+[A-Z][a-z]{1,})?\b/.test(msg);
       const needsPipeline = pipelineKeywords.some(k => msgLower.includes(k)) || hasProperName;
 
       try {
@@ -1290,11 +1291,14 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
             // For specific person/company mentioned, inject full detail including notes.
             // Skip if clearly a Gmail message search (not an email address lookup).
             const isSearchingGmail = ["in gmail", "in my gmail", "search gmail", "search my email", "search my inbox", "emails with ", "emails from ", "messages from ", "find emails", "find my email"].some(k => msgLower.includes(k));
-            // Strip punctuation so "Ellen's" matches "Ellen"
-            const words = msg.split(/\s+/).map(w => w.replace(/[^a-zA-Z]/g, "")).filter(w => w.length > 3);
+            // Strip punctuation; also handle possessives: "Ellen's"→"Ellens"→try "Ellen" too
+            const words = msg.split(/\s+/).map(w => w.replace(/[^a-zA-Z]/g, "")).filter(w => w.length > 2);
             const matching = !isSearchingGmail ? leads.filter(l => {
               const hay = `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase();
-              return words.some(w => hay.includes(w.toLowerCase()));
+              return words.some(w => {
+                const wl = w.toLowerCase();
+                return hay.includes(wl) || (wl.endsWith("s") && wl.length > 3 && hay.includes(wl.slice(0, -1)));
+              });
             }).slice(0, 5) : [];
           if (matching.length > 0) {
             const fullLead = l => ({
