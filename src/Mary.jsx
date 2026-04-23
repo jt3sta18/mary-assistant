@@ -87,7 +87,7 @@ CAPABILITIES:
 - CALENDAR: Analyze provided calendar events, spot conflicts, find free time, list upcoming meetings. You CAN create real calendar events — use "create_events" in your response and they will be added to Google Calendar automatically.
 - TASKS: Create, complete, and manage the user's task list.
 - REMINDERS: Set timed push notifications.
-- EMAIL: You CAN send real emails AND search Gmail. When asked to send an email, compose it and include "send_email". When the user asks to search Gmail, find an email, or mentions "email from [person]" / "emails with [person]" — ALWAYS use "search_gmail" and respond with the email results. NEVER answer a Gmail search request with pipeline/lead data — those are completely separate. Gmail = search_gmail. Pipeline = lead list data.
+- EMAIL: You CAN send real emails AND search Gmail. When asked to send an email, compose it and include "send_email". If the user asks for someone's email address (e.g. "what's Ellen's email?"), check the pipeline lead data first — the email field is included for every lead. Only use find_email if it's blank. If the user asks to search Gmail for messages/threads (e.g. "find my emails with Ellen", "search Gmail for Ellen"), use "search_gmail" — do NOT answer with pipeline data in that case.
 - MEMORY: When James tells you something important about himself, his business, a prospect, or a preference, include it in "save_memory" so you can remember it in future conversations.
 - GOOGLE DRIVE & SHEETS: You can create new Google Sheets and write data to existing ones. When a file is attached (CSV or Drive sheet data), it will appear in the conversation context as a table. Use "create_sheet" to create a new spreadsheet, or "write_to_sheet" to append data to an existing one. Always confirm what was written and how many rows.
 - FINOVEO PIPELINE (CRM): You have live access to the Finoveo outbound lead pipeline. When pipeline data is provided in the conversation context, use it to answer questions about leads, stages, and counts. You can update a lead's status or fields using "update_lead". You can trigger a full FDIC + AI research brief on any bank or credit union using "research_institution". You can find a lead's email using "find_email".
@@ -1281,11 +1281,12 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
           };
           extra += `\n\nComplete lead list (name | company | title | type | state | status | due | email | score | assets):\n${leads.map(compact).join("\n")}`;
 
-          // For any specific person/company mentioned (but NOT email/gmail queries — those go to Gmail),
-          // inject full lead detail including notes
-          const isGmailQuery = ["gmail", "email", "inbox", "mail", "sent", "thread", "correspondence", "search my", "find email", "recent email", "from "].some(k => msgLower.includes(k));
+          // For any specific person/company mentioned, inject full lead detail including notes.
+          // Exception: if the query is clearly about searching Gmail MESSAGES (not looking up an email address),
+          // skip pipeline matching so Claude searches Gmail instead.
+          const isSearchingGmail = ["in gmail", "in my gmail", "search gmail", "search my email", "search my inbox", "emails with ", "emails from ", "messages from ", "find emails", "find my email"].some(k => msgLower.includes(k));
           const words = msg.split(/\s+/).filter(w => w.length > 3);
-          const matching = !isGmailQuery ? leads.filter(l => {
+          const matching = !isSearchingGmail ? leads.filter(l => {
             const hay = `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase();
             return words.some(w => hay.includes(w.toLowerCase()));
           }).slice(0, 5) : [];
