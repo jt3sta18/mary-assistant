@@ -1263,34 +1263,39 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         } catch {}
       }
 
-      // ─── Finoveo Pipeline — always inject full data so Mary can answer anything ──
+      // ─── Finoveo Pipeline — smart injection: only when relevant ──────────
+      // Pipeline keywords OR a proper name → inject data. Otherwise skip entirely.
+      const pipelineKeywords = ["lead","pipeline","prospect","booked","outreach","outbound","stage","follow up","followup","follow-up","dm sent","second call","2nd call","not interested","crm","closed","request sent","accepted","where is","what stage","status of","update on","check on","any update","progress on","responded","pitched","due today","overdue","who have i","who did i","my leads","contacted","not contacted","asset","institution","bank","credit union","score","persona","notes","email address","their email","whose email"];
+      const hasProperName = /\b[A-Z][a-z]{1,}\s+[A-Z][a-z]{1,}\b/.test(msg);
+      const needsPipeline = pipelineKeywords.some(k => msgLower.includes(k)) || hasProperName;
+
       try {
-        const leads = await getLeads();
-        if (leads?.length) {
-          // Stage summary
-          extra += `\n\n${buildPipelineSummary(leads)}`;
+        if (needsPipeline) {
+          const leads = await getLeads();
+          if (leads?.length) {
+            // Always include the stage summary
+            extra += `\n\n${buildPipelineSummary(leads)}`;
 
-          // Full lead list — one rich line per lead so Claude can reason about any question
-          const compact = l => {
-            const name = l.full_name || `${l.first_name} ${l.last_name}`.trim();
-            const due = l.next_linkedin_followup_date || l.next_followup || "";
-            const score = l.lead_score ? ` score:${l.lead_score}` : "";
-            const assets = l.asset_size ? ` assets:${l.asset_size}` : "";
-            const email = l.email ? ` email:${l.email}` : "";
-            return `${name} | ${l.company} | ${l.title || ""} | ${l.institution_type || ""} | ${l.state || ""} | ${l.status}${due ? " | due:" + due : ""}${email}${score}${assets}`;
-          };
-          extra += `\n\nComplete lead list (name | company | title | type | state | status | due | email | score | assets):\n${leads.map(compact).join("\n")}`;
+            // Full compact lead list — one rich line per lead
+            const compact = l => {
+              const name = l.full_name || `${l.first_name} ${l.last_name}`.trim();
+              const due = l.next_linkedin_followup_date || l.next_followup || "";
+              const score = l.lead_score ? ` score:${l.lead_score}` : "";
+              const assets = l.asset_size ? ` assets:${l.asset_size}` : "";
+              const email = l.email ? ` email:${l.email}` : "";
+              return `${name} | ${l.company} | ${l.title || ""} | ${l.institution_type || ""} | ${l.state || ""} | ${l.status}${due ? " | due:" + due : ""}${email}${score}${assets}`;
+            };
+            extra += `\n\nAll leads (name | company | title | type | state | status | due | email | score | assets):\n${leads.map(compact).join("\n")}`;
 
-          // For any specific person/company mentioned, inject full lead detail including notes.
-          // Exception: if the query is clearly about searching Gmail MESSAGES (not looking up an email address),
-          // skip pipeline matching so Claude searches Gmail instead.
-          const isSearchingGmail = ["in gmail", "in my gmail", "search gmail", "search my email", "search my inbox", "emails with ", "emails from ", "messages from ", "find emails", "find my email"].some(k => msgLower.includes(k));
-          // Strip punctuation (apostrophes etc) so "Ellen's" matches "Ellen"
-          const words = msg.split(/\s+/).map(w => w.replace(/[^a-zA-Z]/g, "")).filter(w => w.length > 3);
-          const matching = !isSearchingGmail ? leads.filter(l => {
-            const hay = `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase();
-            return words.some(w => hay.includes(w.toLowerCase()));
-          }).slice(0, 5) : [];
+            // For specific person/company mentioned, inject full detail including notes.
+            // Skip if clearly a Gmail message search (not an email address lookup).
+            const isSearchingGmail = ["in gmail", "in my gmail", "search gmail", "search my email", "search my inbox", "emails with ", "emails from ", "messages from ", "find emails", "find my email"].some(k => msgLower.includes(k));
+            // Strip punctuation so "Ellen's" matches "Ellen"
+            const words = msg.split(/\s+/).map(w => w.replace(/[^a-zA-Z]/g, "")).filter(w => w.length > 3);
+            const matching = !isSearchingGmail ? leads.filter(l => {
+              const hay = `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase();
+              return words.some(w => hay.includes(w.toLowerCase()));
+            }).slice(0, 5) : [];
           if (matching.length > 0) {
             const fullLead = l => ({
               id: l.id,
@@ -1313,6 +1318,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
             extra += `\n\nFull detail — matched lead(s):\n${JSON.stringify(matching.map(fullLead), null, 2)}`;
           }
         }
+      }
       } catch (e) {
         extra += `\n\n⚠️ Could not load pipeline data: ${e.message}`;
       }
