@@ -563,14 +563,34 @@ async function fetchDriveSheets(accessToken) {
   return data.files || [];
 }
 
-// ─── Google Sheets: read a sheet ───
-async function readGoogleSheet(accessToken, spreadsheetId, range = "Sheet1") {
+// ─── Google Sheets: read a sheet (auto-detects first tab name) ───
+async function readGoogleSheet(accessToken, spreadsheetId, range = null) {
+  // Step 1: get spreadsheet metadata to find the actual first tab name
+  let sheetTitle = range;
+  if (!sheetTitle) {
+    try {
+      const meta = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (meta.ok) {
+        const md = await meta.json();
+        sheetTitle = md?.sheets?.[0]?.properties?.title || "Sheet1";
+      } else {
+        sheetTitle = "Sheet1";
+      }
+    } catch { sheetTitle = "Sheet1"; }
+  }
+  // Step 2: read all data from that tab
   const res = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetTitle)}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   if (res.status === 401) throw new Error("token_expired");
-  if (!res.ok) throw new Error("sheets_read_error");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || "sheets_read_error");
+  }
   const data = await res.json();
   return data.values || [];
 }
@@ -911,7 +931,7 @@ export default function Mary() {
       setShowDrivePicker(false);
       setTab("chat");
       setTimeout(() => inputRef.current?.focus(), 100);
-    } catch { alert("Couldn't read that sheet. Try again."); }
+    } catch (err) { alert(`Couldn't read that sheet: ${err.message || "unknown error"}. Try again.`); }
     setDriveLoading(false);
   }, []);
 
