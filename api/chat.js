@@ -23,7 +23,8 @@ export default async function handler(req, res) {
 
     const data = await response.json();
     if (!response.ok) {
-      return res.status(response.status).json({ ...data, _keyHint: keyHint });
+      const msg = data?.error?.message || JSON.stringify(data);
+      return res.status(response.status).json({ error: `${msg} [key: ${keyHint}]` });
     }
     return res.status(response.status).json(data);
   } catch (err) {
