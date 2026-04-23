@@ -129,7 +129,7 @@ RULES:
 When pipeline data is in the context, use it to answer questions accurately — counts, specific leads, stage breakdowns.
 When asked to update a lead's status (e.g. "move X to booked"), use update_lead with the company/person name as "search".
 When asked to research a bank or credit union (e.g. "get me the intel on FMS Bank"), use research_institution — this calls FDIC + AI and returns a full pre-call brief.
-When asked to find someone's email, use find_email.
+When asked for someone's email, FIRST check the lead data provided in the conversation — the email field is included for every lead. Only use find_email if their email field is blank or missing in the sheet data.
 When asked to add a single lead (e.g. "add John Smith, CEO at FMS Bank in PA"), use add_lead with all available fields. Infer institution_type (Bank or Credit Union) from context. Classify persona from title: CEO/President→CEO, CMO/Marketing→CMO, Digital/Tech/CTO→Digital, Retail/Branch/Lending→Retail, Strategy/BizDev→Strategy, Product→Product.
 When a CSV file is attached and user asks to add/import the leads to the pipeline, set add_leads_bulk: true — the app will handle the column mapping and import automatically.
 When asked to draft LinkedIn outreach for a specific lead (e.g. "draft LinkedIn messages for Sarah at Citizens Bank"), use generate_linkedin with the lead's name or company as "search".
