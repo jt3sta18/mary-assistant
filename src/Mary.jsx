@@ -1276,19 +1276,37 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
             const due = l.next_linkedin_followup_date || l.next_followup || "";
             const score = l.lead_score ? ` score:${l.lead_score}` : "";
             const assets = l.asset_size ? ` assets:${l.asset_size}` : "";
-            return `${name} | ${l.company} | ${l.title || ""} | ${l.institution_type || ""} | ${l.state || ""} | ${l.status}${due ? " | due:" + due : ""}${score}${assets}`;
+            const email = l.email ? ` email:${l.email}` : "";
+            return `${name} | ${l.company} | ${l.title || ""} | ${l.institution_type || ""} | ${l.state || ""} | ${l.status}${due ? " | due:" + due : ""}${email}${score}${assets}`;
           };
-          extra += `\n\nComplete lead list (name | company | title | type | state | status | due | score | assets):\n${leads.map(compact).join("\n")}`;
+          extra += `\n\nComplete lead list (name | company | title | type | state | status | due | email | score | assets):\n${leads.map(compact).join("\n")}`;
 
-          // For specific person/company mentioned, inject full JSON detail
+          // For any specific person/company mentioned, inject full detail including notes
           const words = msg.split(/\s+/).filter(w => w.length > 3);
           const matching = leads.filter(l => {
             const hay = `${l.company} ${l.full_name} ${l.first_name} ${l.last_name}`.toLowerCase();
             return words.some(w => hay.includes(w.toLowerCase()));
           }).slice(0, 5);
           if (matching.length > 0) {
-            const slimLead = l => ({ id: l.id, name: l.full_name || `${l.first_name} ${l.last_name}`.trim(), company: l.company, title: l.title, state: l.state, status: l.status, email: l.email, asset_size: l.asset_size, institution_type: l.institution_type, persona: l.persona, linkedin_step: l.linkedin_step, next_followup: l.next_linkedin_followup_date, lead_score: l.lead_score, notes: l.notes });
-            extra += `\n\nFull detail — matched lead(s):\n${JSON.stringify(matching.map(slimLead), null, 2)}`;
+            const fullLead = l => ({
+              id: l.id,
+              name: l.full_name || `${l.first_name} ${l.last_name}`.trim(),
+              company: l.company,
+              title: l.title,
+              state: l.state,
+              status: l.status,
+              email: l.email,
+              asset_size: l.asset_size,
+              institution_type: l.institution_type,
+              persona: l.persona,
+              linkedin_step: l.linkedin_step,
+              next_followup: l.next_linkedin_followup_date,
+              lead_score: l.lead_score,
+              linkedin_url: l.linkedin_url,
+              linkedin_about: l.linkedin_about,
+              notes: l.notes || "",
+            });
+            extra += `\n\nFull detail — matched lead(s):\n${JSON.stringify(matching.map(fullLead), null, 2)}`;
           }
         }
       } catch (e) {
