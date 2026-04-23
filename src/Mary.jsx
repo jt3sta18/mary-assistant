@@ -287,6 +287,24 @@ async function searchGmailEmails(accessToken, query, maxResults = 15) {
   return details.filter(Boolean);
 }
 
+// ── Dismissed-email persistence ───────────────────────────────────────────────
+// Stores a set of Gmail message IDs the user has dismissed so they never
+// reappear after a refresh. Capped at 500 entries so it never bloats.
+function getDismissedEmailIds() {
+  try { return new Set(JSON.parse(localStorage.getItem("mary-dismissed-emails") || "[]")); }
+  catch { return new Set(); }
+}
+function persistDismissedEmailId(id) {
+  const ids = getDismissedEmailIds();
+  ids.add(id);
+  const trimmed = [...ids].slice(-500); // keep newest 500
+  localStorage.setItem("mary-dismissed-emails", JSON.stringify(trimmed));
+}
+function filterDismissed(emails) {
+  const dismissed = getDismissedEmailIds();
+  return emails.filter(e => !dismissed.has(e.id));
+}
+
 async function fetchGmailEmails(accessToken) {
   const params = new URLSearchParams({
     q: "is:unread is:inbox -category:promotions -category:updates -category:social newer_than:2d",
@@ -768,7 +786,7 @@ export default function Mary() {
     if (storedPhoto) setUserPhoto(storedPhoto);
     if (storedToken && tokenExpiry && Date.now() < parseInt(tokenExpiry)) {
       setGoogleToken(storedToken);
-      fetchGmailEmails(storedToken).then(setInboxEmails).catch(() => {});
+      fetchGmailEmails(storedToken).then(filterDismissed).then(setInboxEmails).catch(() => {});
     } else {
       localStorage.removeItem("mary-google-token");
       localStorage.removeItem("mary-google-token-expiry");
@@ -837,7 +855,7 @@ export default function Mary() {
             setUserPhoto(profile.picture);
             localStorage.setItem("mary-user-photo", profile.picture);
           }
-          fetchGmailEmails(response.access_token).then(setInboxEmails).catch(() => {});
+          fetchGmailEmails(response.access_token).then(filterDismissed).then(setInboxEmails).catch(() => {});
         },
       });
     };
@@ -1955,7 +1973,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
           <div style={S.anim}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
               <div style={S.secTitle}>Unread Work Emails</div>
-              <button onClick={() => { const t = localStorage.getItem("mary-google-token"); if (t) fetchGmailEmails(t).then(setInboxEmails).catch(()=>{}); }} style={S.refreshBtn}>↻ Refresh</button>
+              <button onClick={() => { const t = localStorage.getItem("mary-google-token"); if (t) fetchGmailEmails(t).then(filterDismissed).then(setInboxEmails).catch(()=>{}); }} style={S.refreshBtn}>↻ Refresh</button>
             </div>
             {!googleToken && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>📧</div><div style={{fontSize:16,fontWeight:600}}>Google not connected</div><div style={{fontSize:13,marginTop:4,color:"#7a96bc"}}>Connect Google to see your inbox</div></div>}
             {googleToken && !inboxEmails.length && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>📭</div><div style={{fontSize:16,fontWeight:600}}>Inbox clear</div><div style={{fontSize:13,marginTop:4,color:"#7a96bc"}}>No unread work emails</div></div>}
@@ -1980,6 +1998,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                         try {
                           await replyToGmail(t, { threadId: email.threadId, messageId: email.messageId, to: email.from, subject: email.subject, body: replyText });
                           setReplyingTo(null); setReplyText("");
+                          persistDismissedEmailId(email.id);
                           setInboxEmails(p => p.filter((_, idx) => idx !== i));
                         } catch { alert("Failed to send reply"); }
                         setReplySending(false);
@@ -1991,7 +2010,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                   <div style={{display:"flex",gap:8}}>
                     <button onClick={() => { setReplyingTo(i); setReplyText(""); }} style={{...S.gcBtn, fontSize:11, padding:"5px 12px"}}>↩ Reply</button>
                     <button onClick={() => { setTab("chat"); setTimeout(() => { setInput(`Draft a reply to ${email.from?.replace(/<.*>/, "").trim()} about: "${email.subject}"`); inputRef.current?.focus(); }, 100); }} style={{...S.gcBtn, fontSize:11, padding:"5px 12px", background:"rgba(56,170,255,0.15)", color:"#38aaff"}}>✦ Ask Mary</button>
-                    <button onClick={() => setInboxEmails(p => p.filter((_, idx) => idx !== i))} style={{...S.gcBtn, fontSize:11, padding:"5px 12px", background:"rgba(255,255,255,0.04)", color:"#7a96bc", border:"1px solid rgba(255,255,255,0.08)", marginLeft:"auto"}}>✕ Dismiss</button>
+                    <button onClick={() => { persistDismissedEmailId(email.id); setInboxEmails(p => p.filter((_, idx) => idx !== i)); }} style={{...S.gcBtn, fontSize:11, padding:"5px 12px", background:"rgba(255,255,255,0.04)", color:"#7a96bc", border:"1px solid rgba(255,255,255,0.08)", marginLeft:"auto"}}>✕ Dismiss</button>
                   </div>
                 )}
               </div>
