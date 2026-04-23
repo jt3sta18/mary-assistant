@@ -149,9 +149,8 @@ When the user asks you to remind them at a specific time, include a "reminders" 
 If they say something vague like "remind me tomorrow morning", interpret that as 9:00 AM the next day.
 If they say "remind me in 30 minutes", calculate the exact time from now.`;
 
-async function callClaude(messages, useHaiku = false) {
-  const model = useHaiku ? "claude-haiku-4-20250514" : "claude-sonnet-4-20250514";
-  const body = { model, max_tokens: 1500, system: buildSystemPrompt(), messages };
+async function callClaude(messages) {
+  const body = { model: "claude-sonnet-4-20250514", max_tokens: 1500, system: buildSystemPrompt(), messages };
   const res = await fetch("/api/chat", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
@@ -1302,9 +1301,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         apiMsgs[apiMsgs.length - 1] = last;
       }
 
-      // Use Haiku for simple conversational messages — no heavy context attached
-      const isSimple = !needsPipeline && !attachedFile && !extra;
-      const text = await callClaude(apiMsgs, isSimple);
+      const text = await callClaude(apiMsgs);
       const parsed = parseResponse(text);
       if (parsed.tasks_to_add) parsed.tasks_to_add.forEach((t) => addTask(t.title, t.due, t.priority || "medium"));
       if (parsed.tasks_to_complete) setTasks((p) => p.map((t) => parsed.tasks_to_complete.some((tc) => t.title.toLowerCase().includes(tc.toLowerCase())) ? { ...t, done: true } : t));
