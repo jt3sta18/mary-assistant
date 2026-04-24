@@ -1710,64 +1710,80 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
     }
   }, [tab]);
 
-  // ─── Local pipeline lookup — disabled, Claude handles all queries with injected data ──
+  // ─── Local pipeline lookup — answers stage/count/name queries directly from cache ──
+  // Bypasses Claude entirely for simple read queries so chat history confusion,
+  // false lead matches, and wrong update_lead actions can never occur.
+  // Returns a formatted string if handled, null to fall through to Claude.
   const localPipelineLookup = async (_msg) => {
-    return null; // always fall through to Claude who has full sheet data injected
-
     const leads = pipelineCacheRef.current?.leads;
     if (!leads?.length) return null;
     const msgL = _msg.toLowerCase();
 
-    // ── Never intercept email/gmail/calendar/reminder queries ───────────
-    const isEmailQuery = ["email", "gmail", "inbox", "mail", "message", "unread", "sent", "search my", "find email", "from ", "subject", "thread", "correspondence", "reply", "remind", "calendar", "schedule", "meeting", "appointment"].some(k => msgL.includes(k));
-    if (isEmailQuery) return null;
+    // ── Always let Claude handle: writes, email, calendar, tasks, AI reasoning ──
+    const needsClaude = [
+      "update","change","move","edit","set status","mark","add note","append note",
+      "delete","remove lead",
+      "draft","write","generate","linkedin","email","gmail","send","subject",
+      "remind","reminder","calendar","schedule","meeting","task",
+      "research","intel","pitch","who should","suggest","recommend",
+    ].some(k => msgL.includes(k));
+    if (needsClaude) return null;
 
-    const STAGE_LABELS = { not_contacted:"Not Contacted", request_sent:"Request Sent", accepted_dm:"Accepted / DM Sent", following_up:"Following Up", replied_followup:"Replied / Follow Up", booked:"Booked", second_call:"2nd Call", not_interested:"Not Interested", closed:"Closed" };
-    const fmtLead = l => `**${l.full_name || `${l.first_name} ${l.last_name}`.trim()}** — ${l.company}${l.title ? `, ${l.title}` : ""}${l.state ? ` (${l.state})` : ""} · Status: ${STAGE_LABELS[l.status] || l.status}${l.next_linkedin_followup_date ? ` · Follow-up: ${l.next_linkedin_followup_date}` : ""}`;
+    const SL = PIPELINE_STAGES; // { second_call: "2nd Call", ... }
+    const fmtLead = l => {
+      const name = l.full_name || `${l.first_name||""} ${l.last_name||""}`.trim();
+      const parts = [l.company, l.title, l.state ? `(${l.state})` : ""].filter(Boolean);
+      return `**${name}** — ${parts.join(", ")}${l.next_linkedin_followup_date ? ` · follow-up: ${l.next_linkedin_followup_date}` : ""}`;
+    };
 
-    // ── Name/company lookup ──────────────────────────────────────────────
-    const namePat = /\b(where is|what stage is|status of|look up|show me|tell me about|update on|check on|how is|pull up)\b/i;
-    const properName = /\b[A-Z][a-z]+\s+[A-Z][a-z]+\b/.exec(msg);
-    if (namePat.test(msg) || properName) {
-      const words = msg.split(/\s+/).filter(w => w.length > 2);
-      const matches = leads.filter(l => {
-        const hay = `${l.full_name} ${l.first_name} ${l.last_name} ${l.company}`.toLowerCase();
-        return words.some(w => w.length > 3 && hay.includes(w.toLowerCase()));
-      }).slice(0, 5);
-      if (matches.length === 1) return fmtLead(matches[0]);
-      if (matches.length > 1) return `Found ${matches.length} matches:\n${matches.map(fmtLead).join("\n")}`;
+    // ── Stage keyword → status map (order matters: more specific first) ──
+    const stageKw = [
+      ["second call","second_call"], ["2nd call","second_call"],
+      ["not interested","not_interested"],
+      ["not contacted","not_contacted"],
+      ["request sent","request_sent"],
+      ["accepted dm","accepted_dm"], ["accepted/dm","accepted_dm"], ["accepted","accepted_dm"],
+      ["replied","replied_followup"],
+      ["following up","following_up"], ["follow up","following_up"], ["followup","following_up"],
+      ["booked","booked"],
+      ["closed","closed"],
+    ];
+    const matchedStage = stageKw.find(([kw]) => msgL.includes(kw));
+
+    if (matchedStage) {
+      const [, status] = matchedStage;
+      const filtered = leads.filter(l => l.status === status);
+      const label = SL[status] || status;
+      const isCount = /how many|count|number|total/.test(msgL);
+      if (isCount) return `You have **${filtered.length}** leads in the **${label}** stage.`;
+      if (filtered.length === 0) return `No leads in **${label}** right now.`;
+      // Set lastDiscussedLead to first result so follow-ups like "draft for the first one" work
+      if (filtered[0]) lastDiscussedLeadRef.current = filtered[0];
+      return `**${label} — ${filtered.length} lead${filtered.length!==1?"s":""}:**\n${filtered.map(fmtLead).join("\n")}`;
     }
 
-    // ── Stage count/list ─────────────────────────────────────────────────
-    const stageMap = { "booked":["booked"], "second call":["second_call"], "2nd call":["second_call"], "not interested":["not_interested"], "closed":["closed"], "following up":["following_up"], "follow up":["following_up"], "request sent":["request_sent"], "accepted":["accepted_dm"], "dm sent":["accepted_dm"], "replied":["replied_followup"], "not contacted":["not_contacted"] };
-    const askedStages = Object.entries(stageMap).filter(([k]) => msgL.includes(k)).flatMap(([,v]) => v);
-    if (askedStages.length > 0) {
-      const filtered = leads.filter(l => askedStages.includes(l.status));
-      const isCount = /how many|count|number of|total/.test(msgL);
-      if (isCount) return `You have **${filtered.length} ${STAGE_LABELS[askedStages[0]] || askedStages[0]}** leads.`;
-      if (filtered.length === 0) return `No leads found in ${askedStages.map(s => STAGE_LABELS[s]).join("/")} right now.`;
-      return `**${STAGE_LABELS[askedStages[0]]} — ${filtered.length} leads:**\n${filtered.map(fmtLead).join("\n")}`;
-    }
-
-    // ── Total counts / summary ───────────────────────────────────────────
-    if (/how many (leads|prospects|contacts|total)|pipeline (count|size|total)|total leads/.test(msgL)) {
-      const active = leads.filter(l => l.status && l.status !== "not_contacted");
-      const counts = Object.entries(STAGE_LABELS).map(([k, label]) => {
+    // ── Total / summary ──────────────────────────────────────────────────
+    if (/how many (leads|prospects|contacts)|total (leads|pipeline|prospects)|(pipeline|my leads).*(count|size|summary|total)/.test(msgL)) {
+      const counts = Object.entries(SL).map(([k,v]) => {
         const n = leads.filter(l => l.status === k).length;
-        return n > 0 ? `${label}: ${n}` : null;
+        return n > 0 ? `${v}: ${n}` : null;
       }).filter(Boolean);
-      return `**Pipeline summary (${leads.length} total leads):**\n${counts.join("\n")}`;
+      return `**Pipeline — ${leads.length} total leads:**\n${counts.join("\n")}`;
     }
 
-    // ── Due today ────────────────────────────────────────────────────────
-    if (/due today|follow.?up today|overdue/.test(msgL)) {
+    // ── Due today / overdue ──────────────────────────────────────────────
+    if (/due today|overdue|follow.?ups? today/.test(msgL)) {
       const today = new Date().toISOString().split("T")[0];
-      const due = leads.filter(l => l.next_linkedin_followup_date && l.next_linkedin_followup_date <= today && l.status !== "not_contacted");
-      if (due.length === 0) return "No follow-ups due today. 👍";
-      return `**${due.length} follow-up${due.length > 1 ? "s" : ""} due today:**\n${due.map(fmtLead).join("\n")}`;
+      const due = leads.filter(l =>
+        l.next_linkedin_followup_date && l.next_linkedin_followup_date <= today &&
+        !["not_contacted","not_interested","closed"].includes(l.status)
+      );
+      if (due.length === 0) return "No follow-ups due today — you're all caught up. ✅";
+      if (due[0]) lastDiscussedLeadRef.current = due[0];
+      return `**${due.length} follow-up${due.length!==1?"s":""} due today:**\n${due.map(fmtLead).join("\n")}`;
     }
 
-    return null; // couldn't handle locally — fall through to Claude
+    return null; // fall through to Claude
   };
 
   const sendMessage = async (overrideText) => {
@@ -1778,11 +1794,14 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
     setInput("");
     setLoading(true);
     try {
-      // ── Try a free local lookup before hitting the API ──────────────────
+      // ── Try local pipeline lookup FIRST — handles stage/count/due queries ──
+      // Bypasses Claude entirely so chat history confusion can never affect results.
       if (!attachedFile) {
         const localAnswer = await localPipelineLookup(msg);
         if (localAnswer) {
-          setChat((p) => [...p, { role: "assistant", text: localAnswer, ts: Date.now() }]);
+          const assistantEntry = { role: "assistant", text: localAnswer, ts: Date.now() };
+          // Update display — chat state is also used as API context for Claude
+          setChat(p => [...p, assistantEntry]);
           setLoading(false);
           return;
         }
@@ -1895,7 +1914,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               // Detect which pipeline stage the user is asking about — check the
               // current message directly (React state hasn't updated yet) plus history.
               const allRecentMsgs = [
-                ...chatHistory.slice(-5),
+                ...chat.slice(-5).map(m => ({ role: m.role, content: m.text || "" })),
                 { role: "user", content: msg },
               ];
               const recentStage = detectRecentStage(allRecentMsgs);
