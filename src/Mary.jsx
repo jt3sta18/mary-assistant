@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 
 function MarkdownText({ text, style }) {
@@ -2247,8 +2248,8 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         </div>
       )}
 
-      {/* Header */}
-      <header style={S.header}>
+      {/* Header — hidden on pipeline tab (pipeline has its own toolbar) */}
+      {tab !== "pipeline" && <header style={S.header}>
         <div style={S.headerRow}>
           <div>
             <div style={S.logo}><span style={gradText}>{`Hi, ${userName || "James"}`}</span></div>
@@ -2262,7 +2263,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
           <div style={S.liveDot} />
           <span>powered by <span style={{ color: "#00f5c0", fontWeight: 600 }}>finoveo</span></span>
         </div>
-      </header>
+      </header>}
 
       {/* Content */}
       <main style={tab === "pipeline" ? {...S.main, padding: 0, paddingBottom: "calc(52px + env(safe-area-inset-bottom, 0px))", overflowY: "hidden", display: "flex", flexDirection: "column", background: PP.navy} : tab === "chat" ? {...S.main, padding: 0, paddingBottom: "calc(52px + env(safe-area-inset-bottom, 0px))", overflowY: "hidden", display: "flex", flexDirection: "column"} : S.main}>
@@ -2715,12 +2716,6 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               {[25,50,100].map(n=><button key={n} onClick={()=>{setPpPgSz(n);setPpPgN(1)}} style={{padding:"3px 8px",fontSize:11,borderRadius:6,border:`1px solid ${ppPgSz===n?PP.teal:PP.border}`,background:ppPgSz===n?"rgba(0,219,168,.1)":"transparent",color:ppPgSz===n?PP.teal:PP.muted,cursor:"pointer",fontFamily:PPF}}>{n}</button>)}
             </div>}
 
-            {/* Drawer */}
-            {ppSelectedLead&&<PPDrawer lead={ppLeads.find(l=>l.id===ppSelectedLead.id)||ppSelectedLead} onClose={()=>setPpSelectedLead(null)} onUpd={ppUpd} onAct={ppAct} onDel={id=>{ppDelLead(id);setPpSelectedLead(null)}} aiL={ppAiLoading}/>}
-
-            {/* Add Lead modal */}
-            {ppShowAdd&&<PPAddLead onClose={()=>setPpShowAdd(false)} onAdd={ppAddLeadFn}/>}
-
             {/* Toast */}
             {ppToast&&<div style={{position:"fixed",bottom:80,left:"50%",transform:"translateX(-50%)",zIndex:300,padding:"10px 20px",background:PP.card,border:`1px solid ${PP.border}`,borderRadius:12,fontSize:13,color:PP.soft,boxShadow:"0 8px 32px rgba(0,0,0,.5)",fontFamily:PPF,whiteSpace:"nowrap"}}>{ppToast}</div>}
 
@@ -2732,6 +2727,10 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
           </div>
         )}
       </main>
+
+      {/* Pipeline Drawer & Add Modal — portaled to document.body to escape root's overflow:hidden and any stacking context */}
+      {ppSelectedLead&&createPortal(<PPDrawer lead={ppLeads.find(l=>l.id===ppSelectedLead.id)||ppSelectedLead} onClose={()=>setPpSelectedLead(null)} onUpd={ppUpd} onAct={ppAct} onDel={id=>{ppDelLead(id);setPpSelectedLead(null)}} aiL={ppAiLoading}/>,document.body)}
+      {ppShowAdd&&createPortal(<PPAddLead onClose={()=>setPpShowAdd(false)} onAdd={ppAddLeadFn}/>,document.body)}
 
       {/* Drive Sheet Picker Overlay */}
       {showDrivePicker && (
