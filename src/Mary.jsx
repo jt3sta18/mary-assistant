@@ -448,12 +448,19 @@ function buildPipelineSummary(leads) {
 function findLeadBySearch(leads, query, preferLead = null) {
   const q = query.toLowerCase();
 
-  // Words that are NOT name parts — used to gauge how many "name words" the query has
+  // Words that are NOT name parts — used to gauge how many "name words" the query has.
+  // Pipeline stage names and common action/question words are all excluded so they
+  // never cause false lead matches (e.g. "booked" or "stage" in "who is in the booked stage?").
   const NON_NAME = new Set([
+    // Action / question words
     "from","the","pipeline","please","their","about","with","that","this","what","have","does",
     "lead","find","tell","update","delete","remove","add","note","status","email","call","book",
     "move","show","look","pull","info","contact","them","him","her","his","its","they","who",
-    "yes","okay","sure","just","can","you","get","lets","please","deal","did","was","are"
+    "yes","okay","sure","just","can","you","get","lets","please","deal","did","was","are",
+    "into","onto","for","and","not","all","any","how","many","list","give","which","stage",
+    // Pipeline stage names (so "booked stage", "closed leads", etc. don't hit lead names)
+    "booked","closed","accepted","contacted","requested","replied","interested",
+    "second","following","followed","outreach","prospect","prospects",
   ]);
   // Count query words that look like real name parts (length > 2, not a known stop/action word)
   const queryNameWordCount = q
@@ -498,27 +505,36 @@ function findLeadBySearch(leads, query, preferLead = null) {
   return null;
 }
 
-// Scan the last few chat messages for a specific pipeline stage being discussed.
-// Used to filter the injected lead list when the user asks follow-up questions like "who are they?".
+// Detect which pipeline stage the user is asking about.
+// IMPORTANT: always checks the current message (last in array) first so that
+// "who is in the booked stage?" wins over "second call" appearing in old history.
 function detectRecentStage(messages) {
   const stageMap = {
     second_call:      ["second call", "2nd call", "second_call"],
-    booked:           ["booked", "booking", "who is booked", "who's booked"],
+    booked:           ["booked", "booking"],
     accepted_dm:      ["accepted dm", "accepted/dm", "accepted and dm"],
     following_up:     ["following up", "follow-up stage", "followup stage", "follow up stage"],
     replied_followup: ["replied follow", "replied/follow", "replied to follow"],
     not_contacted:    ["not contacted", "not_contacted", "haven't contacted"],
     request_sent:     ["request sent", "request_sent", "pending request"],
     not_interested:   ["not interested", "not_interested"],
-    closed:           ["closed", "who is closed", "who's closed"],
+    closed:           ["closed"],
   };
-  // Look at the last 6 messages (3 turns) for stage keywords
-  const recentText = messages.slice(-6)
-    .map(m => (typeof m.content === "string" ? m.content : "").toLowerCase())
-    .join(" ");
+
+  const textOf = m => (typeof m?.content === "string" ? m.content : "").toLowerCase();
+
+  // 1. Check the CURRENT message first — it always wins over history
+  const current = textOf(messages[messages.length - 1]);
   for (const [stage, keywords] of Object.entries(stageMap)) {
-    if (keywords.some(k => recentText.includes(k))) return stage;
+    if (keywords.some(k => current.includes(k))) return stage;
   }
+
+  // 2. Fall back to recent history (skip the current message we already checked)
+  const historyText = messages.slice(0, -1).slice(-4).map(textOf).join(" ");
+  for (const [stage, keywords] of Object.entries(stageMap)) {
+    if (keywords.some(k => historyText.includes(k))) return stage;
+  }
+
   return null;
 }
 
