@@ -1342,7 +1342,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
           return;
         }
       }
-      const apiMsgs = updated.slice(-6).map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.text }));
+      const apiMsgs = updated.slice(-20).map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.text }));
       const open = tasks.filter((t) => !t.done);
       const pending = reminders.filter((r) => !r.fired);
       let ctx = "";
