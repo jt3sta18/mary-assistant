@@ -134,12 +134,13 @@ RULES:
 
 PIPELINE RULES — follow these exactly:
 1. When a "Lead record" block is provided, that is the exact person being asked about. Answer directly and only from that record. Never list other leads.
-2. When "All leads" is provided, search it for the person/company and answer about them only. Do not dump the whole list.
+2. When "All leads" is provided, that IS the complete pipeline data you have — answer directly from it. Do NOT say you need to "search the pipeline further" or that you need more data. If it says "filtered to X stage", those are ALL leads in that stage — list every one of them.
 3. Search is case-insensitive and partial — "andy" matches "Andy Montgomery", "beverly" matches "Beverly Credit Union".
 4. BEFORE executing update_lead or delete_lead, confirm in one line: "I'll delete [Name] from the pipeline — go ahead?" Do NOT include the update_lead or delete_lead JSON in this same response. Output only the confirmation question and stop.
 5. Exception to rule 4: if the user already confirmed in this message (said "yes", "go ahead", "do it", "confirmed", or similar), then include the action JSON immediately — do NOT ask again. ONE confirmation total, then act.
 6. Format contact info cleanly — label each field, not a raw data dump. For lists, show name + key detail only (scannable).
 7. If a contact isn't found in the injected data, say "I don't see [name] in the current pipeline data — they may not be added yet."
+8. Never generate update_lead or delete_lead in response to a read-only question (who is in X stage, how many leads, show me X). Only generate those actions when James explicitly asks to change or delete something.
 When asked to update a lead's status (e.g. "move X to booked"), use update_lead.
 When asked to add a note to a contact (e.g. "add a note to Andy that we spoke today"), use update_lead with the note text — it will be appended automatically.
 When asked to delete or remove a lead, use delete_lead.
@@ -501,15 +502,15 @@ function findLeadBySearch(leads, query, preferLead = null) {
 // Used to filter the injected lead list when the user asks follow-up questions like "who are they?".
 function detectRecentStage(messages) {
   const stageMap = {
-    second_call:      ["second call", "2nd call"],
-    booked:           ["booked", "booking"],
-    accepted_dm:      ["accepted", "accepted dm"],
-    following_up:     ["following up", "follow-up stage", "followup stage"],
-    replied_followup: ["replied follow", "replied/follow"],
-    not_contacted:    ["not contacted"],
-    request_sent:     ["request sent", "requested"],
-    not_interested:   ["not interested"],
-    closed:           ["closed"],
+    second_call:      ["second call", "2nd call", "second_call"],
+    booked:           ["booked", "booking", "who is booked", "who's booked"],
+    accepted_dm:      ["accepted dm", "accepted/dm", "accepted and dm"],
+    following_up:     ["following up", "follow-up stage", "followup stage", "follow up stage"],
+    replied_followup: ["replied follow", "replied/follow", "replied to follow"],
+    not_contacted:    ["not contacted", "not_contacted", "haven't contacted"],
+    request_sent:     ["request sent", "request_sent", "pending request"],
+    not_interested:   ["not interested", "not_interested"],
+    closed:           ["closed", "who is closed", "who's closed"],
   };
   // Look at the last 6 messages (3 turns) for stage keywords
   const recentText = messages.slice(-6)
@@ -1875,9 +1876,13 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               // stage/count/general pipeline queries. Skip this for Gmail queries
               // to avoid combining a large lead list with email data (token overflow).
 
-              // If recent conversation was about a specific stage (e.g. "second call"),
-              // inject ONLY leads from that stage — avoids 40k cap truncating the answer.
-              const recentStage = detectRecentStage(chatHistory);
+              // Detect the pipeline stage being discussed — check current message first,
+              // then fall back to recent chat history. Passing the current message explicitly
+              // because React state (chatHistory) hasn't updated yet when this runs.
+              const recentStage = detectRecentStage([
+                ...chatHistory.slice(-5),
+                { role: "user", content: msg },
+              ]);
               const sourceLeads = recentStage ? leads.filter(l => l.status === recentStage) : leads;
 
               const compact = l => {
