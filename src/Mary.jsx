@@ -1579,8 +1579,11 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
 
   // Returns cached leads if fresh (< 60s), otherwise fetches fresh from sheet
   const getLeads = async () => {
-    const CACHE_TTL = 60 * 1000;
-    if (pipelineCacheRef.current && (Date.now() - pipelineCacheRef.current.ts) < CACHE_TTL) {
+    // Use the cache whenever it exists — no TTL eviction.
+    // Write operations (updateLead, deleteLead, addLead) already set
+    // pipelineCacheRef.current = null to force a refresh on the next call.
+    // This avoids a slow 11k-lead re-fetch in the middle of every chat response.
+    if (pipelineCacheRef.current?.leads?.length > 0) {
       return pipelineCacheRef.current.leads;
     }
     if (!pipelineFetchingRef.current) {
@@ -1593,8 +1596,8 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         pipelineFetchingRef.current = false;
       }
     }
-    // Another fetch is in progress — wait for it
-    return pipelineCacheRef.current?.leads || await fetchOutboundLeads();
+    // Another fetch is in progress — return whatever is cached (even partial)
+    return pipelineCacheRef.current?.leads || [];
   };
 
   // ─── Pipeline Tab Functions ──────────────────────────────────────────
@@ -1853,7 +1856,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
             if (specificMatch) {
               // Remember this lead for future pronoun references
               lastDiscussedLeadRef.current = specificMatch;
-              // Specific person found — inject only their record, not the whole list
+              // Specific person found — inject only their record
               extra += `\n\nLead record:\n${JSON.stringify({
                 id: specificMatch.id,
                 name: specificMatch.full_name || `${specificMatch.first_name} ${specificMatch.last_name}`.trim(),
@@ -1872,37 +1875,40 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                 notes: specificMatch.notes || "",
               }, null, 2)}`;
             } else if (!isSearchingGmail) {
-              // No specific person and not a Gmail task — inject compact list for
-              // stage/count/general pipeline queries. Skip this for Gmail queries
-              // to avoid combining a large lead list with email data (token overflow).
-
-              // Detect the pipeline stage being discussed — check current message first,
-              // then fall back to recent chat history. Passing the current message explicitly
-              // because React state (chatHistory) hasn't updated yet when this runs.
-              const recentStage = detectRecentStage([
+              // No specific person, not a Gmail task.
+              // Detect which pipeline stage the user is asking about — check the
+              // current message directly (React state hasn't updated yet) plus history.
+              const allRecentMsgs = [
                 ...chatHistory.slice(-5),
                 { role: "user", content: msg },
-              ]);
-              const sourceLeads = recentStage ? leads.filter(l => l.status === recentStage) : leads;
+              ];
+              const recentStage = detectRecentStage(allRecentMsgs);
 
               const compact = l => {
                 const name = l.full_name || `${l.first_name} ${l.last_name}`.trim();
                 const due = l.next_linkedin_followup_date || "";
-                const email = l.email ? ` | ${l.email}` : "";
-                return `${name} | ${l.company} | ${l.title || ""} | ${l.state || ""} | ${l.status}${due ? " | due:" + due : ""}${email}`;
+                const emailField = l.email ? ` | email:${l.email}` : "";
+                return `${name} | ${l.company} | ${l.title || ""} | ${l.state || ""} | status:${l.status}${due ? " | due:"+due : ""}${emailField}`;
               };
-              const compactLines = sourceLeads.map(compact);
-              const MAX_CHARS = 40000;
-              let listText = "";
-              for (const line of compactLines) {
-                if ((listText + "\n" + line).length > MAX_CHARS) {
-                  listText += `\n... (${sourceLeads.length - listText.split("\n").length + 1} more leads truncated)`;
-                  break;
+
+              if (recentStage) {
+                // Stage-specific query: inject ONLY leads from that stage (no cap needed — it's a small set)
+                const stageLeads = leads.filter(l => l.status === recentStage);
+                const stageName = PIPELINE_STAGES[recentStage] || recentStage;
+                extra += `\n\nPipeline — ${stageName} stage (${stageLeads.length} leads, this is the complete list):\n${stageLeads.map(compact).join("\n")}`;
+              } else {
+                // General query — inject full list capped at 40k chars
+                const MAX_CHARS = 40000;
+                let listText = "";
+                for (const line of leads.map(compact)) {
+                  if ((listText + "\n" + line).length > MAX_CHARS) {
+                    listText += `\n... (${leads.length - listText.split("\n").length + 1} more leads — ask about a specific stage or name to see more)`;
+                    break;
+                  }
+                  listText += (listText ? "\n" : "") + line;
                 }
-                listText += (listText ? "\n" : "") + line;
+                extra += `\n\nAll pipeline leads (${leads.length} total, partial — use a name or stage to get full results):\n${listText}`;
               }
-              const stageLabel = recentStage ? ` (${PIPELINE_STAGES[recentStage] || recentStage} stage only — ${sourceLeads.length} leads)` : "";
-              extra += `\n\nAll leads${stageLabel}:\n${listText}`;
             }
           }
         }
