@@ -746,6 +746,7 @@ export default function Mary() {
   const [driveLoading, setDriveLoading] = useState(false);
   const [googleTokenExpiring, setGoogleTokenExpiring] = useState(false);
   const tokenClientRef = useRef(null);
+  const silentRefreshNeededRef = useRef(false); // set when token is expired on load
   const recognitionRef = useRef(null);
   const sendMessageRef = useRef(null);
   const chatEnd = useRef(null);
@@ -790,11 +791,13 @@ export default function Mary() {
     if (storedName) setUserName(storedName);
     if (storedPhoto) setUserPhoto(storedPhoto);
     if (storedToken && tokenExpiry && Date.now() < parseInt(tokenExpiry)) {
+      // Token still valid — use it normally
       setGoogleToken(storedToken);
       fetchGmailEmails(storedToken).then(filterDismissed).then(setInboxEmails).catch(() => {});
-    } else {
-      localStorage.removeItem("mary-google-token");
-      localStorage.removeItem("mary-google-token-expiry");
+    } else if (storedToken) {
+      // Token expired but we have a stored one — flag for silent refresh once GIS loads
+      // Keep the profile info visible while we try; only clear if refresh fails
+      silentRefreshNeededRef.current = true;
     }
   }, []);
 
@@ -817,18 +820,18 @@ export default function Mary() {
         setGoogleTokenExpiring(false);
         localStorage.removeItem("mary-google-token");
         localStorage.removeItem("mary-google-token-expiry");
-      } else if (minsLeft <= 10) {
-        // Expiring soon — show warning and try a silent refresh
-        setGoogleTokenExpiring(true);
+      } else if (minsLeft <= 30) {
+        // Expiring within 30 minutes — attempt silent refresh now
         if (tokenClientRef.current) {
           try { tokenClientRef.current.requestAccessToken({ prompt: "" }); } catch {}
         }
+        if (minsLeft <= 5) setGoogleTokenExpiring(true); // only show warning banner in last 5 mins
       } else {
         setGoogleTokenExpiring(false);
       }
     };
     check();
-    const iv = setInterval(check, 120000); // re-check every 2 minutes
+    const iv = setInterval(check, 60000); // re-check every 60 seconds
     return () => clearInterval(iv);
   }, [googleToken]);
 
@@ -844,13 +847,23 @@ export default function Mary() {
         client_id: GOOGLE_CLIENT_ID,
         scope: GOOGLE_SCOPES,
         callback: async (response) => {
-          if (response.error) return;
+          if (response.error) {
+            // Silent refresh failed — clear expired token so reconnect button appears
+            if (silentRefreshNeededRef.current) {
+              silentRefreshNeededRef.current = false;
+              localStorage.removeItem("mary-google-token");
+              localStorage.removeItem("mary-google-token-expiry");
+            }
+            return;
+          }
+          silentRefreshNeededRef.current = false;
           const expiry = Date.now() + response.expires_in * 1000;
           setGoogleToken(response.access_token);
           localStorage.setItem("mary-google-token", response.access_token);
           localStorage.setItem("mary-google-token-expiry", expiry.toString());
           setGoogleLoading(false);
-          // Fetch profile and inbox on connect
+          setGoogleTokenExpiring(false);
+          // Fetch profile and inbox on connect/refresh
           const profile = await fetchGoogleProfile(response.access_token);
           if (profile?.given_name) {
             setUserName(profile.given_name);
@@ -863,8 +876,28 @@ export default function Mary() {
           fetchGmailEmails(response.access_token).then(filterDismissed).then(setInboxEmails).catch(() => {});
         },
       });
+
+      // If the token expired while away, attempt silent refresh now that GIS is ready
+      if (silentRefreshNeededRef.current) {
+        try { tokenClientRef.current.requestAccessToken({ prompt: "" }); } catch {}
+      }
     };
     document.head.appendChild(script);
+
+    // Re-attempt silent refresh whenever the user comes back to the tab
+    const onVisible = () => {
+      if (!tokenClientRef.current) return;
+      const expiry = parseInt(localStorage.getItem("mary-google-token-expiry") || "0");
+      const minsLeft = (expiry - Date.now()) / 60000;
+      // Refresh if expired or expiring within 30 minutes
+      if (minsLeft < 30) {
+        try { tokenClientRef.current.requestAccessToken({ prompt: "" }); } catch {}
+      }
+    };
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") onVisible();
+    });
+
     return () => { if (script.parentNode) script.parentNode.removeChild(script); };
   }, []);
 
