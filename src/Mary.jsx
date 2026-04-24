@@ -2173,7 +2173,29 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               )}
               <div style={S.chatBar}>
                 <button onClick={() => setShowAttachMenu((p) => !p)} style={{...S.sendBtn, background: showAttachMenu ? "rgba(52,168,83,0.2)" : "rgba(255,255,255,0.06)", color: showAttachMenu ? "#34a853" : "#7a96bc", boxShadow:"none", fontSize:16}} title="Attach file">📎</button>
-                <button onClick={startListening} style={{...S.sendBtn, background: isListening ? "#ef4444" : "rgba(255,255,255,0.06)", color: isListening ? "#fff" : "#7a96bc", boxShadow:"none", fontSize:16}} title="Voice input">🎤</button>
+                <button onClick={startListening} style={{...S.sendBtn, background: isListening ? "rgba(239,68,68,0.15)" : "rgba(255,255,255,0.06)", boxShadow:"none", padding:"0 10px", display:"flex", alignItems:"center", justifyContent:"center"}} title="Voice input">
+                  <svg width="22" height="16" viewBox="0 0 22 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <style>{`
+                      @keyframes wave1 { 0%,100%{height:4px;y:6px} 50%{height:12px;y:2px} }
+                      @keyframes wave2 { 0%,100%{height:8px;y:4px} 50%{height:16px;y:0px} }
+                      @keyframes wave3 { 0%,100%{height:6px;y:5px} 50%{height:14px;y:1px} }
+                      @keyframes wave4 { 0%,100%{height:10px;y:3px} 50%{height:16px;y:0px} }
+                      @keyframes wave5 { 0%,100%{height:4px;y:6px} 50%{height:10px;y:3px} }
+                      .wb { rx:1.5; }
+                      .w1 { animation: ${isListening ? "wave1 0.8s ease-in-out infinite" : "none"}; }
+                      .w2 { animation: ${isListening ? "wave2 0.8s ease-in-out infinite 0.1s" : "none"}; }
+                      .w3 { animation: ${isListening ? "wave3 0.8s ease-in-out infinite 0.2s" : "none"}; }
+                      .w4 { animation: ${isListening ? "wave4 0.8s ease-in-out infinite 0.15s" : "none"}; }
+                      .w5 { animation: ${isListening ? "wave5 0.8s ease-in-out infinite 0.05s" : "none"}; }
+                    `}</style>
+                    <rect className="wb w1" x="0"  y="6" width="3" height="4"  fill={isListening ? "#ef4444" : "#7a96bc"} rx="1.5"/>
+                    <rect className="wb w2" x="4"  y="4" width="3" height="8"  fill={isListening ? "#ef4444" : "#7a96bc"} rx="1.5"/>
+                    <rect className="wb w3" x="8"  y="2" width="3" height="12" fill={isListening ? "#ef4444" : "#00dba8"} rx="1.5"/>
+                    <rect className="wb w4" x="12" y="4" width="3" height="8"  fill={isListening ? "#ef4444" : "#7a96bc"} rx="1.5"/>
+                    <rect className="wb w5" x="16" y="6" width="3" height="4"  fill={isListening ? "#ef4444" : "#7a96bc"} rx="1.5"/>
+                    <rect className="wb w6" x="19" y="5" width="3" height="6"  fill={isListening ? "#ef4444" : "#7a96bc"} rx="1.5"/>
+                  </svg>
+                </button>
                 <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") sendMessage(); setShowAttachMenu(false); }} placeholder={isListening ? "Listening..." : attachedFile ? `Tell Mary what to do with ${attachedFile.name}...` : "Ask Mary anything..."} style={{...S.chatIn, borderColor: isListening ? "rgba(239,68,68,0.4)" : attachedFile ? "rgba(52,168,83,0.4)" : "rgba(255,255,255,0.10)"}} />
                 <button onClick={sendMessage} disabled={!input.trim() || loading} style={S.sendBtn}>↑</button>
               </div>
