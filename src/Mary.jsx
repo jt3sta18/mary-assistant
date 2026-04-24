@@ -461,11 +461,15 @@ function findLeadBySearch(leads, query, preferLead = null) {
     .filter(w => w.length > 2 && !NON_NAME.has(w))
     .length;
 
-  // For each lead, count how many of their name/company words appear in the message.
+  // Split query into a set of whole words (strips punctuation) for exact word matching.
+  // Using a Set + .has() prevents "cal" matching inside "call", "kim" inside "skim", etc.
+  const qWords = new Set(q.split(/\s+/).map(w => w.replace(/[^a-z]/g, "")).filter(w => w.length > 0));
+
+  // For each lead, count how many of their name/company words appear as whole words in the query.
   const scored = leads.map(l => {
     const nameWords = `${l.full_name || ""} ${l.first_name || ""} ${l.last_name || ""} ${l.company || ""}`
       .toLowerCase().split(/\s+/).map(w => w.replace(/[^a-z]/g, "")).filter(w => w.length > 2);
-    const score = nameWords.filter(w => q.includes(w)).length;
+    const score = nameWords.filter(w => qWords.has(w)).length;
     return { l, score };
   }).filter(x => x.score > 0).sort((a, b) => b.score - a.score);
 
