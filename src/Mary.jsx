@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import * as XLSX from "xlsx";
 
 function MarkdownText({ text, style }) {
@@ -711,6 +711,272 @@ function relativeDate(iso) {
 
 const PC = { high: "#ef4444", medium: "#f5c518", low: "#7a96bc" };
 
+// ═══════════════════════════════════════════════════════════════════════
+// PIPELINE TAB — constants, helpers, sub-components (outside Mary fn)
+// ═══════════════════════════════════════════════════════════════════════
+const PP = { navy:"#071428", deep:"#0c1a34", card:"#101f3a", border:"rgba(255,255,255,0.10)", bL:"rgba(255,255,255,0.06)", teal:"#00dba8", teal2:"#00f5c0", blue:"#1a6ee0", blue2:"#38aaff", gold:"#f5c518", white:"#fff", soft:"rgba(255,255,255,0.65)", muted:"#7a96bc", red:"#ff6b6b", purple:"#a78bfa" };
+const PPF = "'Plus Jakarta Sans',-apple-system,sans-serif";
+const PPGRAD = "linear-gradient(90deg,#00f5c0,#38aaff)";
+
+// Status constants
+const P_SL = ["not_contacted","request_sent","accepted_dm","following_up","replied_followup","booked","second_call","not_interested","closed"];
+const P_SS = {
+  not_contacted:{ bg:PP.deep, text:PP.muted, dot:"#4a6080" },
+  request_sent:{ bg:"#0c2848", text:PP.blue2, dot:PP.blue2 },
+  accepted_dm:{ bg:"#042e20", text:PP.teal2, dot:PP.teal2 },
+  following_up:{ bg:"#2a2008", text:PP.gold, dot:PP.gold },
+  replied_followup:{ bg:"#1a2a1a", text:"#6dd6a0", dot:"#4cc88a" },
+  booked:{ bg:"#1a0a3a", text:PP.purple, dot:PP.purple },
+  second_call:{ bg:"#1a1040", text:"#c4a0ff", dot:"#b088f0" },
+  not_interested:{ bg:"#2a0a0a", text:PP.red, dot:PP.red },
+  closed:{ bg:PP.deep, text:"#4a6080", dot:"#3a4a60" },
+};
+const P_STAGES_LABELS = { not_contacted:"Not Contacted", request_sent:"Request Sent", accepted_dm:"Accepted / DM Sent", following_up:"Following Up", replied_followup:"Replied / Follow Up", booked:"Booked", second_call:"2nd Call", not_interested:"Not Interested", closed:"Closed" };
+
+const PP_PERSONAS = ["CEO","CMO","Digital","Retail","Strategy","Product","Other"];
+const PP_PC = { CEO:PP.gold, CMO:PP.blue2, Digital:PP.teal2, Retail:PP.teal, Strategy:PP.purple, Product:"#fb7185", Other:PP.muted };
+
+// Helper functions
+const ppTd = () => new Date().toISOString().split("T")[0];
+const ppAddD = (d,n) => { const dt=new Date(d); dt.setDate(dt.getDate()+n); return dt.toISOString().split("T")[0]; };
+const ppIsOv = d => d && d <= ppTd();
+const ppFmtD = d => { if(!d||d==="") return "—"; return new Date(d+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"}); };
+const ppHasEmail = l => l.email && l.email.includes("@");
+const ppFmtS = s => P_STAGES_LABELS[s] || (s||"").replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
+
+function ppClassPersona(title) {
+  if(!title) return "Other"; const t=title.toLowerCase();
+  if(/\b(ceo|president|chairman|chief executive|managing director)\b/.test(t)) return "CEO";
+  if(/\b(cmo|chief marketing|marketing officer|head of marketing|vp.*marketing|marketing director|chief growth)\b/.test(t)) return "CMO";
+  if(/\b(digital|innovation|technology|cto|cio|online banking)\b/.test(t)) return "Digital";
+  if(/\b(retail|consumer|branch|deposit|lending)\b/.test(t)) return "Retail";
+  if(/\b(strategy|strategic|business development)\b/.test(t)) return "Strategy";
+  if(/\b(product officer|product management|chief product|head of product)\b/.test(t)) return "Product";
+  return "Other";
+}
+
+// AI prompts
+const PP_FIN = "Finoveo sells a white-label client acquisition & data engine (PFScores) to banks/CUs. Behavioral data, customer insights, cross-sell. 90-day deploy, no core changes, 10x deeper data.";
+const PP_PA = { CEO:"growth, revenue, fintechs", CMO:"segmentation, acquisition, engagement", Digital:"digital CX, behavioral data", Retail:"cross-sell, deposits, visibility", Strategy:"intelligence, monetizing data", Product:"innovation, data-driven", Other:"efficiency, advantage" };
+
+function ppEmailPrompt(l) {
+  const p=l.persona||ppClassPersona(l.title);
+  return "Write a personalized cold email opening line for Finoveo's founder.\n\nFINOVEO: "+PP_FIN+"\n\nLEAD: "+(l.full_name||l.first_name+" "+l.last_name)+", "+(l.title||"?")+" at "+(l.company||"?")+" ("+(l.institution_type||"?")+ ", "+(l.state||"?")+")\nLinkedIn about: "+(l.linkedin_about||"N/A")+"\nPersona: "+(PP_PA[p]||PP_PA.Other)+"\n\nRULES: 1-2 sentences MAX. Pasted above email starting with 'Most banks are sitting on...'. Reference role/company/geography. NO flattery, NO 'hope you're well', NO 'I came across', NO questions. Peer tone.\n\nReturn ONLY the opener. No JSON.";
+}
+
+function ppLiPrompt(l) {
+  const p=l.persona||ppClassPersona(l.title);
+  return "Generate LinkedIn outreach messages for Finoveo's founder.\n\nFINOVEO: "+PP_FIN+"\n\nLEAD: "+(l.full_name||l.first_name+" "+l.last_name)+", "+(l.title||"?")+" at "+(l.company||"?")+" ("+(l.institution_type||"?")+ ", "+(l.state||"?")+")\nLinkedIn about: "+(l.linkedin_about||"N/A")+"\nPersona: "+(PP_PA[p]||PP_PA.Other)+"\n\nConcise, sharp, professional. No fake compliments.\n\nReturn ONLY valid JSON:\n{\"linkedin_connection_note\":\"<under 280 chars>\",\"linkedin_dm_1\":\"<3-4 sentences>\",\"linkedin_followup_1\":\"<2-3 sentences>\",\"linkedin_followup_2\":\"<1-2 sentences>\"}";
+}
+
+async function ppAiCall(prompt) {
+  try {
+    const r=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt})});
+    const d=await r.json();
+    if(d.success) return d.data;
+    console.error("AI error:",d.error);
+    return {_error:d.error||"AI generation failed"};
+  } catch(e) { console.error("AI:",e); return {_error:e.message}; }
+}
+
+async function ppGsFetch(onP) {
+  let all=[],off=0,lim=500,tot=Infinity;
+  while(off<tot) {
+    const r=await fetch("/api/sheets?scriptUrl="+encodeURIComponent(OUTBOUND_SCRIPT_URL)+"&action=getLeads&offset="+off+"&limit="+lim);
+    const d=await r.json();
+    if(!d.success) throw new Error(d.error||"Failed");
+    all=all.concat(d.data||[]); tot=d.total||0; off+=lim;
+    if(onP) onP(all.length, tot);
+    if(!d.data||!d.data.length) break;
+  }
+  return all.map(l=>({...l,lead_score:parseInt(l.lead_score)||0,linkedin_step:parseInt(l.linkedin_step)||0}));
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────
+function PPStatusBadge({status,onClick}){
+  const s=P_SS[status]||P_SS.not_contacted;
+  return <span onClick={onClick} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:600,background:s.bg,color:s.text,cursor:onClick?"pointer":"default",transition:"all .2s",border:"1px solid transparent",whiteSpace:"nowrap"}}
+    onMouseEnter={e=>{if(onClick)e.currentTarget.style.borderColor=s.dot}} onMouseLeave={e=>e.currentTarget.style.borderColor="transparent"}>
+    <span style={{width:6,height:6,borderRadius:3,background:s.dot,flexShrink:0}}/>{ppFmtS(status)}{onClick&&<span style={{fontSize:9,marginLeft:2}}>▾</span>}
+  </span>;
+}
+
+function PPStatusDrop({current,onSel,onClose}){
+  return <div style={{position:"absolute",top:"100%",left:0,zIndex:60,background:PP.card,border:`1px solid ${PP.border}`,borderRadius:10,padding:4,minWidth:180,boxShadow:"0 12px 40px rgba(0,0,0,.6)"}} onClick={e=>e.stopPropagation()}>
+    {P_SL.map(s=><button key={s} onClick={()=>{onSel(s);onClose()}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 10px",border:"none",borderRadius:6,cursor:"pointer",fontSize:12,fontFamily:PPF,background:s===current?"rgba(0,219,168,0.1)":"transparent",color:s===current?PP.teal:(P_SS[s]||{}).text||PP.soft,transition:"background .1s"}}
+      onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.04)"} onMouseLeave={e=>e.currentTarget.style.background=s===current?"rgba(0,219,168,0.1)":"transparent"}>
+      <span style={{width:6,height:6,borderRadius:3,background:(P_SS[s]||{}).dot||PP.muted,flexShrink:0}}/>{ppFmtS(s)}
+    </button>)}
+  </div>;
+}
+
+function PPBtn({children,onClick,disabled,style:s,small,ghost}){
+  return <button onClick={onClick} disabled={disabled} style={{padding:small?"4px 10px":"7px 14px",fontSize:small?11:12,fontWeight:600,borderRadius:8,border:ghost?`1px solid ${PP.border}`:"none",cursor:disabled?"not-allowed":"pointer",opacity:disabled?.4:1,transition:"all .15s",color:PP.white,background:ghost?"transparent":undefined,fontFamily:PPF,whiteSpace:"nowrap",...s}}
+    onMouseEnter={e=>{if(!disabled){e.currentTarget.style.opacity=".85";e.currentTarget.style.transform="translateY(-1px)"}}}
+    onMouseLeave={e=>{e.currentTarget.style.opacity=disabled?.4:"1";e.currentTarget.style.transform="none"}}>{children}</button>;
+}
+
+function PPCopyField({label,value}){
+  const[ok,setOk]=useState(false);
+  return <div style={{marginBottom:14}}><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:PP.muted,marginBottom:4,fontFamily:PPF}}>{label}</div><div style={{background:PP.deep,border:`1px solid ${PP.border}`,borderRadius:10,padding:12,fontSize:13,color:value?PP.soft:"#3a5070",lineHeight:1.6,whiteSpace:"pre-wrap",fontStyle:value?"normal":"italic",minHeight:28,fontFamily:PPF}}>{value||"Not generated"}</div>{value&&<button onClick={()=>{navigator.clipboard.writeText(value);setOk(true);setTimeout(()=>setOk(false),1500)}} style={{fontSize:11,color:ok?PP.teal:PP.blue2,background:"none",border:"none",cursor:"pointer",marginTop:3,fontFamily:PPF}}>{ok?"Copied!":"Copy"}</button>}</div>;
+}
+
+function PPDrawer({lead,onClose,onUpd,onAct,onDel,aiL}){
+  const[drawerTab,setDrawerTab]=useState("overview");
+  const[notes,setNotes]=useState(lead?.notes||"");
+  const[liGen,setLiGen]=useState(false);
+  const[liM,setLiM]=useState({});
+  const[efL,setEfL]=useState(false);const[efR,setEfR]=useState(null);
+  const[editF,setEditF]=useState({});
+  const[editSaved,setEditSaved]=useState(false);
+  const[emailGen,setEmailGen]=useState(false);
+  useEffect(()=>{
+    setNotes(lead?.notes||"");setDrawerTab("overview");setEfR(null);
+    setLiM({linkedin_connection_note:lead?.linkedin_connection_note||"",linkedin_dm_1:lead?.linkedin_dm_1||"",linkedin_followup_1:lead?.linkedin_followup_1||"",linkedin_followup_2:lead?.linkedin_followup_2||""});
+    setEditF({first_name:lead?.first_name||"",last_name:lead?.last_name||"",email:lead?.email||"",title:lead?.title||"",company:lead?.company||"",company_url:lead?.company_url||"",institution_type:lead?.institution_type||"Bank",state:lead?.state||"",asset_size:lead?.asset_size||"",linkedin_url:lead?.linkedin_url||""});
+  },[lead?.id]);
+  if(!lead) return null;
+  const nm=lead.full_name||`${lead.first_name||""} ${lead.last_name||""}`.trim();
+
+  const genLi=async()=>{setLiGen(true);const r=await ppAiCall(ppLiPrompt(lead));if(r&&r._error){alert("Error: "+r._error);setLiGen(false);return}if(r&&r.linkedin_connection_note){setLiM(r);onUpd(lead.id,r)}setLiGen(false)};
+
+  const findEmail=async()=>{
+    setEfL(true);setEfR(null);
+    const names=nm.split(/\s+/);const first=names[0];const last=names.slice(1).join(" ")||names[0];
+    try{
+      const r=await fetch("/api/hunter",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({first_name:first,last_name:last,company:lead.company||"",domain:lead.company_url||""})});
+      const d=await r.json();
+      setEfR(d);
+      if(d.success&&d.email){onUpd(lead.id,{email:d.email})}
+    }catch(e){setEfR({success:false,error:e.message})}
+    setEfL(false);
+  };
+
+  const genEmail=async()=>{
+    setEmailGen(true);
+    const line=await ppAiCall(ppEmailPrompt(lead));
+    if(line&&line._error){alert("Error: "+line._error);setEmailGen(false);return}
+    if(line&&typeof line==="string"){onUpd(lead.id,{email_first_line_personalization:line})}
+    setEmailGen(false);
+  };
+
+  return <div style={{position:"fixed",inset:0,zIndex:200,display:"flex",justifyContent:"flex-end"}} onClick={onClose}>
+    <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.5)",backdropFilter:"blur(4px)"}}/>
+    <div style={{position:"relative",width:"100%",maxWidth:460,background:PP.navy,borderLeft:`1px solid ${PP.border}`,overflowY:"auto",animation:"ppSlideIn .2s ease"}} onClick={e=>e.stopPropagation()}>
+      <div style={{position:"sticky",top:0,zIndex:10,background:"rgba(7,20,40,.95)",backdropFilter:"blur(8px)",borderBottom:`1px solid ${PP.bL}`,padding:"18px 22px"}}>
+        <div style={{display:"flex",justifyContent:"space-between"}}>
+          <div><div style={{fontSize:17,fontWeight:700,color:PP.white,fontFamily:PPF}}>{nm||"—"}</div><div style={{fontSize:13,color:PP.muted,marginTop:2,fontFamily:PPF}}>{lead.title} · {lead.company}</div></div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:PP.muted,fontSize:18,cursor:"pointer"}}>✕</button>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center",marginTop:10,flexWrap:"wrap"}}>
+          <PPStatusBadge status={lead.status}/>
+          {lead.persona&&<span style={{fontSize:11,fontWeight:700,color:PP_PC[lead.persona]||PP.muted,fontFamily:PPF}}>{lead.persona}</span>}
+        </div>
+        <div style={{display:"flex",gap:4,marginTop:14,flexWrap:"wrap"}}>{["overview","edit","email","linkedin","actions"].map(t=><button key={t} onClick={()=>setDrawerTab(t)} style={{padding:"6px 12px",fontSize:12,fontWeight:600,borderRadius:8,border:"none",cursor:"pointer",background:drawerTab===t?PP.card:"transparent",color:drawerTab===t?PP.white:PP.muted,fontFamily:PPF,transition:"all .15s"}}>{t==="actions"?"Status":t[0].toUpperCase()+t.slice(1)}</button>)}</div>
+      </div>
+      <div style={{padding:22}}>
+        {drawerTab==="overview"&&<>
+          <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:2,color:PP.muted,marginBottom:8,fontFamily:PPF}}>Contact</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px 16px",fontSize:13,marginBottom:20,fontFamily:PPF}}>
+            <div><span style={{color:PP.muted}}>Email: </span><span style={{color:PP.soft}}>{lead.email||"—"}</span></div>
+            <div><span style={{color:PP.muted}}>State: </span><span style={{color:PP.soft}}>{lead.state||"—"}</span></div>
+            <div><span style={{color:PP.muted}}>Type: </span><span style={{color:PP.soft}}>{lead.institution_type||"—"}</span></div>
+            <div><span style={{color:PP.muted}}>Assets: </span><span style={{color:PP.soft}}>{lead.asset_size||"—"}</span></div>
+            {lead.company_url&&<div style={{gridColumn:"1/3"}}><span style={{color:PP.muted}}>URL: </span><a href={(lead.company_url.startsWith("http")?lead.company_url:"https://"+lead.company_url)} target="_blank" rel="noreferrer" style={{color:PP.blue2,textDecoration:"none",fontSize:13}}>{lead.company_url} ↗</a></div>}
+          </div>
+          {lead.linkedin_url&&<a href={lead.linkedin_url} target="_blank" rel="noreferrer" style={{fontSize:13,color:PP.blue2,textDecoration:"none",fontFamily:PPF}}>LinkedIn ↗</a>}
+          <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:2,color:PP.muted,marginTop:20,marginBottom:8,fontFamily:PPF}}>Notes</div>
+          <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3} style={{width:"100%",background:PP.deep,border:`1px solid ${PP.border}`,borderRadius:10,padding:12,fontSize:13,color:PP.soft,resize:"none",outline:"none",boxSizing:"border-box",fontFamily:PPF}}/>
+          <button onClick={()=>onUpd(lead.id,{notes})} style={{fontSize:11,color:PP.teal,background:"none",border:"none",cursor:"pointer",marginTop:4,fontFamily:PPF}}>Save Notes</button>
+          <div style={{borderTop:`1px solid ${PP.border}`,marginTop:24,paddingTop:16}}>
+            <button onClick={()=>{if(confirm("Delete this lead permanently?")){onDel(lead.id);onClose()}}} style={{fontSize:12,color:PP.red,background:"none",border:`1px solid ${PP.red}`,borderRadius:8,padding:"6px 14px",cursor:"pointer",fontFamily:PPF,transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,60,60,.1)"}} onMouseLeave={e=>{e.currentTarget.style.background="none"}}>Delete Contact</button>
+          </div>
+        </>}
+        {drawerTab==="edit"&&(()=>{
+          const ef=(l,k,ph)=><div style={{marginBottom:12}}><div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1.5,color:PP.muted,marginBottom:4,fontFamily:PPF}}>{l}</div><input value={editF[k]||""} onChange={e=>setEditF(p=>({...p,[k]:e.target.value}))} placeholder={ph||""} style={{width:"100%",padding:"8px 10px",fontSize:13,background:PP.deep,border:`1px solid ${PP.border}`,borderRadius:8,color:PP.white,outline:"none",boxSizing:"border-box",fontFamily:PPF}}/></div>;
+          return <>
+            <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:2,color:PP.muted,marginBottom:14,fontFamily:PPF}}>Edit Contact</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 12px"}}>{ef("First Name","first_name","John")}{ef("Last Name","last_name","Smith")}</div>
+            {ef("Email","email","john@bank.com")}
+            {ef("Title","title","CEO")}
+            {ef("Company","company","First National Bank")}
+            {ef("Company URL","company_url","firstnational.com")}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 12px"}}>
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1.5,color:PP.muted,marginBottom:4,fontFamily:PPF}}>Type</div>
+                <select value={editF.institution_type||"Bank"} onChange={e=>setEditF(p=>({...p,institution_type:e.target.value}))} style={{width:"100%",padding:"8px 10px",fontSize:13,background:PP.deep,border:`1px solid ${PP.border}`,borderRadius:8,color:PP.white,outline:"none",fontFamily:PPF,appearance:"none"}}>
+                  <option>Bank</option><option>Credit Union</option><option>Other</option>
+                </select>
+              </div>
+              {ef("State","state","MA")}
+            </div>
+            {ef("Asset Size","asset_size","$2.1B")}
+            {ef("LinkedIn URL","linkedin_url")}
+            <PPBtn onClick={()=>{
+              const fn=(editF.first_name||"").trim();const ln=(editF.last_name||"").trim();
+              const updates={...editF,full_name:[fn,ln].filter(Boolean).join(" ")||nm};
+              onUpd(lead.id,updates);
+              setEditSaved(true);setTimeout(()=>setEditSaved(false),2000);
+            }} style={{width:"100%",padding:12,background:editSaved?"rgba(0,219,168,.2)":PPGRAD,fontSize:13,marginTop:4,border:editSaved?`1px solid ${PP.teal}`:"none"}}>
+              {editSaved?"✓ Saved":"Save Changes"}
+            </PPBtn>
+          </>;
+        })()}
+        {drawerTab==="email"&&<>
+          {!ppHasEmail(lead)&&<div style={{background:PP.deep,border:`1px solid ${PP.border}`,borderRadius:12,padding:16,marginBottom:16}}>
+            <div style={{fontSize:12,color:PP.gold,marginBottom:10,fontFamily:PPF}}>No email on file</div>
+            <PPBtn onClick={findEmail} disabled={efL} style={{width:"100%",padding:10,background:efL?PP.card:`linear-gradient(135deg,#f5c518,#e0a800)`,fontSize:13,color:"#071428"}}>{efL?"Searching Hunter.io…":"🔍 Find Email (Hunter.io)"}</PPBtn>
+            {efR&&<div style={{marginTop:10,fontSize:12,fontFamily:PPF,color:efR.success?PP.teal:PP.red}}>{efR.success?`Found: ${efR.email} (${efR.confidence}% confidence)`:efR.error||"Not found"}</div>}
+          </div>}
+          {ppHasEmail(lead)&&<>
+            <PPBtn onClick={genEmail} disabled={emailGen||aiL} style={{width:"100%",padding:12,background:(emailGen||aiL)?PP.card:PPGRAD,fontSize:13,marginBottom:16}}>{(emailGen||aiL)?"Generating…":"Generate Email First Line"}</PPBtn>
+            <PPCopyField label="Email First Line (prepend to cold email)" value={lead.email_first_line_personalization}/>
+          </>}
+        </>}
+        {drawerTab==="linkedin"&&<>
+          <PPBtn onClick={genLi} disabled={liGen} style={{width:"100%",padding:12,background:liGen?PP.card:`linear-gradient(135deg,${PP.blue},${PP.teal})`,fontSize:13,marginBottom:16}}>{liGen?"Generating…":"Generate LinkedIn Messages"}</PPBtn>
+          <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:2,color:PP.muted,marginBottom:8,fontFamily:PPF}}>Step {lead.linkedin_step||0}/3</div>
+          <div style={{display:"flex",gap:4,marginBottom:10}}>{[1,2,3].map(s=><div key={s} style={{flex:1,height:5,borderRadius:3,background:(lead.linkedin_step||0)>=s?PP.teal:PP.deep,transition:"background .3s"}}/>)}</div>
+          {lead.next_linkedin_followup_date&&<div style={{fontSize:12,color:PP.muted,marginBottom:16,fontFamily:PPF}}>Next follow-up: <span style={{color:ppIsOv(lead.next_linkedin_followup_date)?PP.gold:PP.soft,fontWeight:ppIsOv(lead.next_linkedin_followup_date)?700:400}}>{ppFmtD(lead.next_linkedin_followup_date)}</span></div>}
+          <PPCopyField label="Connection Note (280 char)" value={liM.linkedin_connection_note}/>
+          <PPCopyField label="DM 1" value={liM.linkedin_dm_1}/>
+          <PPCopyField label="Follow-Up 1" value={liM.linkedin_followup_1}/>
+          <PPCopyField label="Follow-Up 2" value={liM.linkedin_followup_2}/>
+        </>}
+        {drawerTab==="actions"&&<>
+          <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:2,color:PP.muted,marginBottom:12,fontFamily:PPF}}>Change Status</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            {P_SL.map(s=>{const st=P_SS[s]||P_SS.not_contacted;return <button key={s} onClick={()=>onAct(lead.id,s)} style={{padding:"10px 12px",fontSize:12,fontWeight:600,borderRadius:10,border:lead.status===s?`2px solid ${st.dot}`:`1px solid ${PP.border}`,background:lead.status===s?st.bg:"transparent",color:lead.status===s?st.text:PP.soft,cursor:"pointer",fontFamily:PPF,transition:"all .15s",textAlign:"left",display:"flex",alignItems:"center",gap:8}}
+              onMouseEnter={e=>e.currentTarget.style.background=st.bg} onMouseLeave={e=>{if(lead.status!==s)e.currentTarget.style.background="transparent"}}>
+              <span style={{width:8,height:8,borderRadius:4,background:st.dot,flexShrink:0}}/>{ppFmtS(s)}
+            </button>})}
+          </div>
+          <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:2,color:PP.muted,marginTop:24,marginBottom:10,fontFamily:PPF}}>Persona</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{PP_PERSONAS.map(p=><button key={p} onClick={()=>onUpd(lead.id,{persona:p})} style={{padding:"5px 12px",fontSize:11,borderRadius:8,border:lead.persona===p?`1px solid ${PP.teal}`:`1px solid ${PP.border}`,background:lead.persona===p?"rgba(0,219,168,.1)":"transparent",color:lead.persona===p?PP.teal2:PP.muted,cursor:"pointer",fontFamily:PPF,transition:"all .15s"}}>{p}</button>)}</div>
+        </>}
+      </div>
+    </div>
+  </div>;
+}
+
+function PPAddLead({onClose,onAdd}){
+  const[f,sF]=useState({first_name:"",last_name:"",email:"",title:"",company:"",company_url:"",institution_type:"Bank",state:"",linkedin_url:"",asset_size:""});
+  const set=(k,v)=>sF(p=>({...p,[k]:v}));
+  const inp=(l,k,ph)=><div style={{marginBottom:10}}><div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1.5,color:PP.muted,marginBottom:3,fontFamily:PPF}}>{l}</div><input value={f[k]} onChange={e=>set(k,e.target.value)} placeholder={ph||""} style={{width:"100%",padding:"8px 12px",fontSize:13,background:PP.navy,border:`1px solid ${PP.border}`,borderRadius:8,color:PP.white,outline:"none",boxSizing:"border-box",fontFamily:PPF}}/></div>;
+  const go=()=>{onAdd({...f,id:crypto.randomUUID(),full_name:`${f.first_name} ${f.last_name}`.trim(),status:"not_contacted",linkedin_step:0,lead_score:0,persona:ppClassPersona(f.title),export_status:"not_exported",created_at:new Date().toISOString(),updated_at:new Date().toISOString()});onClose()};
+  return <div style={{position:"fixed",inset:0,zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,.7)",backdropFilter:"blur(6px)"}} onClick={onClose}><div style={{background:PP.card,border:`1px solid ${PP.border}`,borderRadius:18,width:"100%",maxWidth:500,padding:28,maxHeight:"85vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+    <h2 style={{fontSize:18,fontWeight:700,color:PP.white,margin:"0 0 16px",fontFamily:PPF}}>Add Lead</h2>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 12px"}}>{inp("First Name","first_name","John")}{inp("Last Name","last_name","Smith")}</div>
+    {inp("Email","email","john@bank.com")}{inp("Title","title","CEO")}{inp("Company","company","First National Bank")}{inp("Company URL","company_url","firstnationalbank.com")}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 12px"}}>
+      <div style={{marginBottom:10}}><div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1.5,color:PP.muted,marginBottom:3,fontFamily:PPF}}>Type</div><select value={f.institution_type} onChange={e=>set("institution_type",e.target.value)} style={{width:"100%",padding:"8px 12px",fontSize:13,background:PP.navy,border:`1px solid ${PP.border}`,borderRadius:8,color:PP.white,outline:"none",fontFamily:PPF}}><option>Bank</option><option>Credit Union</option><option>Other</option></select></div>
+      {inp("State","state","MA")}
+    </div>
+    {inp("LinkedIn URL","linkedin_url")}{inp("Asset Size","asset_size","$2.1B")}
+    <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:12}}><PPBtn onClick={onClose} ghost>Cancel</PPBtn><PPBtn onClick={go} disabled={!f.first_name&&!f.last_name} style={{background:PPGRAD}}>Add Lead</PPBtn></div>
+  </div></div>;
+}
+
 export default function Mary() {
   const [tab, setTab] = useState("today");
   const [tasks, setTasks] = useState([]);
@@ -755,6 +1021,26 @@ export default function Mary() {
   const pipelineCacheRef = useRef(null);   // { leads: [...], ts: Date.now() }
   const pipelineFetchingRef = useRef(false); // prevents duplicate in-flight fetches
   const lastDiscussedLeadRef = useRef(null); // last lead specifically matched in a message
+
+  // ─── Pipeline Tab State ──────────────────────────────────────────────
+  const [ppLeads, setPpLeads] = useState([]);
+  const [ppView, setPpView] = useState("all");
+  const [ppSearch, setPpSearch] = useState("");
+  const [ppFP, setPpFP] = useState("");
+  const [ppFT, setPpFT] = useState("");
+  const [ppFS, setPpFS] = useState("");
+  const [ppFE, setPpFE] = useState("");
+  const [ppSortBy, setPpSortBy] = useState("full_name");
+  const [ppSortDir, setPpSortDir] = useState("asc");
+  const [ppSelectedLead, setPpSelectedLead] = useState(null);
+  const [ppLoading, setPpLoading] = useState(false);
+  const [ppLoadProg, setPpLoadProg] = useState({p:0,t:0});
+  const [ppAiLoading, setPpAiLoading] = useState(false);
+  const [ppShowAdd, setPpShowAdd] = useState(false);
+  const [ppPgN, setPpPgN] = useState(1);
+  const [ppPgSz, setPpPgSz] = useState(25);
+  const [ppSDD, setPpSDD] = useState(null);
+  const [ppToast, setPpToast] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -1264,6 +1550,100 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
     // Another fetch is in progress — wait for it
     return pipelineCacheRef.current?.leads || await fetchOutboundLeads();
   };
+
+  // ─── Pipeline Tab Functions ──────────────────────────────────────────
+  const ppFlash = (msg) => { setPpToast(msg); setTimeout(() => setPpToast(null), 3000); };
+
+  const ppLoadLeads = async () => {
+    setPpLoading(true); setPpLoadProg({p:0,t:0});
+    try {
+      let d = await ppGsFetch((p,t) => setPpLoadProg({p,t}));
+      d = d.map(l => ({
+        ...l,
+        lead_score: parseInt(l.lead_score)||0,
+        linkedin_step: parseInt(l.linkedin_step)||0,
+        status: (l.status||"not_contacted").toLowerCase().trim().replace(/\s+/g,"_"),
+        persona: l.persona || ppClassPersona(l.title),
+      }));
+      setPpLeads(d);
+      pipelineCacheRef.current = { leads: d, ts: Date.now() };
+      ppFlash(`Synced ${d.length} leads`);
+    } catch(e) { ppFlash("Failed: "+e.message); }
+    setPpLoading(false);
+  };
+
+  const ppUpd = useCallback((id, updates) => {
+    setPpLeads(p => p.map(l => l.id===id ? {...l,...updates} : l));
+    setPpSelectedLead(p => p?.id===id ? {...p,...updates} : p);
+    pipelineCacheRef.current = null;
+    updateOutboundLead(id, updates).catch(console.error);
+  }, []);
+
+  const ppAct = useCallback(async (id, action) => {
+    const l = ppLeads.find(x => x.id===id); if(!l) return; let u={};
+    switch(action) {
+      case "not_contacted": u={status:"not_contacted",linkedin_step:0,next_linkedin_followup_date:""}; break;
+      case "request_sent": u={status:"request_sent",linkedin_step:0,last_linkedin_action_date:ppTd()}; ppFlash("Request sent"); break;
+      case "accepted_dm": u={status:"accepted_dm",linkedin_step:1,last_linkedin_action_date:ppTd(),next_linkedin_followup_date:ppAddD(ppTd(),3)}; ppFlash("Accepted / DM sent — FU in 3 days"); break;
+      case "following_up": {
+        const step=(l.linkedin_step||0)+1;
+        const days=step===2?4:5;
+        u={status:"following_up",linkedin_step:Math.min(step,3),last_linkedin_action_date:ppTd(),next_linkedin_followup_date:step<3?ppAddD(ppTd(),days):""};
+        ppFlash(step<3?`Follow-up ${step-1} sent — next in ${days} days`:"Final follow-up sent"); break;
+      }
+      case "followup1": u={status:"following_up",linkedin_step:2,last_linkedin_action_date:ppTd(),next_linkedin_followup_date:ppAddD(ppTd(),4)}; ppFlash("FU1 — next in 4 days"); break;
+      case "followup2": u={status:"following_up",linkedin_step:3,last_linkedin_action_date:ppTd(),next_linkedin_followup_date:""}; ppFlash("FU2 sent — sequence done"); break;
+      case "booked": u={status:"booked",next_linkedin_followup_date:""}; ppFlash("Booked!"); break;
+      case "second_call": u={status:"second_call"}; ppFlash("2nd Call"); break;
+      case "not_interested": u={status:"not_interested",next_linkedin_followup_date:""}; ppFlash("Not interested"); break;
+      case "replied_followup": u={status:"replied_followup",next_linkedin_followup_date:""}; ppFlash("Replied / Follow Up"); break;
+      case "closed": u={status:"closed",next_linkedin_followup_date:""}; ppFlash("Closed"); break;
+      case "gen_email":
+        setPpAiLoading(true);
+        const line = await ppAiCall(ppEmailPrompt(l));
+        if(line&&line._error){ppFlash("Error: "+line._error);setPpAiLoading(false);return}
+        if(line&&typeof line==="string"){ppUpd(id,{email_first_line_personalization:line});ppFlash("Email line generated")}
+        else ppFlash("Failed — check API key");
+        setPpAiLoading(false); return;
+      default: break;
+    }
+    if(Object.keys(u).length) ppUpd(id, u);
+  }, [ppLeads, ppUpd]);
+
+  const ppDelLead = async (id) => {
+    try {
+      await fetch("/api/sheets", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({scriptUrl:OUTBOUND_SCRIPT_URL, action:"deleteLead", id}) });
+    } catch(e) { console.error("Delete error:", e); }
+    setPpLeads(p => p.filter(l => l.id!==id));
+    pipelineCacheRef.current = null;
+    ppFlash("Lead deleted");
+  };
+
+  const ppNextAction = (l) => {
+    switch(l.status) {
+      case "not_contacted": return {label:"Request Sent",action:"request_sent",bg:PP.blue};
+      case "request_sent": return {label:"Accepted/DM",action:"accepted_dm",bg:"#0a6a50"};
+      case "accepted_dm": return {label:"FU1",action:"followup1",bg:"#5a4a0a"};
+      case "following_up": return (l.linkedin_step||0)<3?{label:"FU2",action:"followup2",bg:"#6a3a0a"}:{label:"Booked",action:"booked",bg:"#3a1a6a"};
+      case "replied_followup": return {label:"Booked",action:"booked",bg:"#3a1a6a"};
+      case "booked": return {label:"2nd Call",action:"second_call",bg:"#1a1040"};
+      default: return null;
+    }
+  };
+
+  const ppAddLeadFn = async (lead) => {
+    setPpLeads(p => [lead, ...p]);
+    pipelineCacheRef.current = null;
+    try { await fetch("/api/sheets",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({scriptUrl:OUTBOUND_SCRIPT_URL,action:"addLead",lead})}); } catch(e){console.error(e);}
+    ppFlash("Lead added");
+  };
+
+  // Load pipeline when tab first opened
+  useEffect(() => {
+    if (tab === "pipeline" && ppLeads.length === 0 && !ppLoading) {
+      ppLoadLeads();
+    }
+  }, [tab]);
 
   // ─── Local pipeline lookup — disabled, Claude handles all queries with injected data ──
   const localPipelineLookup = async (_msg) => {
@@ -1802,12 +2182,50 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
   // Gradient text helper
   const gradText = { background: "linear-gradient(90deg, #00f5c0, #38aaff)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" };
 
+  // ─── Pipeline computed values ────────────────────────────────────────
+  const ppFiltered = useMemo(() => {
+    let r = [...ppLeads];
+    if(ppView==="not_contacted") r=r.filter(l=>l.status==="not_contacted");
+    else if(ppView==="request_sent") r=r.filter(l=>l.status==="request_sent");
+    else if(ppView==="accepted_dm") r=r.filter(l=>l.status==="accepted_dm");
+    else if(ppView==="following_up") r=r.filter(l=>l.status==="following_up");
+    else if(ppView==="replied_followup") r=r.filter(l=>l.status==="replied_followup");
+    else if(ppView==="due_today") r=r.filter(l=>ppIsOv(l.next_linkedin_followup_date)&&!["booked","second_call","not_interested","closed","replied_followup"].includes(l.status));
+    else if(ppView==="booked") r=r.filter(l=>l.status==="booked");
+    else if(ppView==="second_call") r=r.filter(l=>l.status==="second_call");
+    else if(ppView==="not_interested") r=r.filter(l=>l.status==="not_interested");
+    else if(ppView==="closed") r=r.filter(l=>l.status==="closed");
+    if(ppSearch){const q=ppSearch.toLowerCase();r=r.filter(l=>`${l.full_name} ${l.first_name} ${l.last_name} ${l.company} ${l.title} ${l.email}`.toLowerCase().includes(q))}
+    if(ppFP) r=r.filter(l=>l.persona===ppFP);
+    if(ppFT) r=r.filter(l=>l.institution_type===ppFT);
+    if(ppFS) r=r.filter(l=>l.state===ppFS);
+    if(ppFE==="has") r=r.filter(l=>ppHasEmail(l));
+    if(ppFE==="no") r=r.filter(l=>!ppHasEmail(l));
+    r.sort((a,b)=>{let av=a[ppSortBy],bv=b[ppSortBy];if(!isNaN(Number(av))){av=Number(av)||0;bv=Number(bv)||0}else{av=String(av||"").toLowerCase();bv=String(bv||"").toLowerCase()}return ppSortDir==="asc"?(av<bv?-1:av>bv?1:0):(av>bv?-1:av<bv?1:0)});
+    return r;
+  }, [ppLeads,ppView,ppSearch,ppFP,ppFT,ppFS,ppFE,ppSortBy,ppSortDir]);
+
+  const ppTotalPg = Math.ceil(ppFiltered.length / ppPgSz);
+  const ppPaged = ppFiltered.slice((ppPgN-1)*ppPgSz, ppPgN*ppPgSz);
+
+  const ppKpis = useMemo(() => ({
+    total: ppLeads.length,
+    due: ppLeads.filter(l=>ppIsOv(l.next_linkedin_followup_date)&&!["booked","second_call","not_interested","closed"].includes(l.status)).length,
+    booked: ppLeads.filter(l=>l.status==="booked").length + ppLeads.filter(l=>l.status==="second_call").length,
+    accepted: ppLeads.filter(l=>l.status==="accepted_dm").length,
+  }), [ppLeads]);
+
+  const ppStates = useMemo(() => [...new Set(ppLeads.map(l=>l.state).filter(Boolean))].sort(), [ppLeads]);
+
+  const ppTogSort = f => { if(ppSortBy===f) setPpSortDir(d=>d==="asc"?"desc":"asc"); else{setPpSortBy(f);setPpSortDir("asc")} };
+
   const TABS = [
     { k: "today", icon: "◈", label: "Today" },
     { k: "tasks", icon: "☐", label: "Tasks", badge: openTasks.length },
     { k: "inbox", icon: "✉", label: "Inbox", badge: inboxEmails.length },
     { k: "reminders", icon: "⏰", label: "Alerts", badge: pending.length },
     { k: "chat", icon: "✦", label: "Chat" },
+    { k: "pipeline", icon: "◈", label: "Pipeline" },
   ];
 
   return (
@@ -1847,7 +2265,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       </header>
 
       {/* Content */}
-      <main style={tab === "chat" ? {...S.main, padding: 0, paddingBottom: "calc(52px + env(safe-area-inset-bottom, 0px))", overflowY: "hidden", display: "flex", flexDirection: "column"} : S.main}>
+      <main style={tab === "pipeline" ? {...S.main, padding: 0, paddingBottom: "calc(52px + env(safe-area-inset-bottom, 0px))", overflowY: "hidden", display: "flex", flexDirection: "column", background: PP.navy} : tab === "chat" ? {...S.main, padding: 0, paddingBottom: "calc(52px + env(safe-area-inset-bottom, 0px))", overflowY: "hidden", display: "flex", flexDirection: "column"} : S.main}>
 
         {/* ── TODAY ── */}
         {tab === "today" && (
@@ -2200,6 +2618,117 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                 <button onClick={sendMessage} disabled={!input.trim() || loading} style={S.sendBtn}>↑</button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ── PIPELINE ── */}
+        {tab === "pipeline" && (
+          <div style={{display:"flex",flexDirection:"column",height:"100%",background:PP.navy,color:PP.white,fontFamily:PPF,overflow:"hidden"}} onClick={()=>setPpSDD(null)}>
+            {/* Header row */}
+            <div style={{display:"flex",alignItems:"center",gap:8,padding:"12px 14px 8px",flexShrink:0,borderBottom:`1px solid ${PP.bL}`}}>
+              <div style={{fontSize:16,fontWeight:700,flex:1,color:PP.white}}>Pipeline</div>
+              <button onClick={()=>setPpShowAdd(true)} style={{padding:"6px 12px",fontSize:12,fontWeight:600,borderRadius:8,background:PPGRAD,border:"none",color:PP.navy,cursor:"pointer",fontFamily:PPF}}>+ Lead</button>
+              <button onClick={ppLoadLeads} disabled={ppLoading} style={{padding:"6px 12px",fontSize:12,fontWeight:600,borderRadius:8,background:"transparent",border:`1px solid ${PP.border}`,color:ppLoading?PP.muted:PP.soft,cursor:"pointer",fontFamily:PPF}}>↻ Refresh</button>
+            </div>
+
+            {/* KPI cards */}
+            <div style={{display:"flex",gap:8,padding:"10px 14px 6px",flexShrink:0}}>
+              {[
+                {label:"Total",value:ppKpis.total,color:PP.white,v:"all"},
+                {label:"Due Today",value:ppKpis.due,color:ppKpis.due?PP.gold:PP.muted,v:"due_today"},
+                {label:"Accepted",value:ppKpis.accepted,color:ppKpis.accepted?PP.teal:PP.muted,v:"accepted_dm"},
+                {label:"Booked",value:ppKpis.booked,color:PP.purple,v:"booked"},
+              ].map(k=>(
+                <div key={k.v} onClick={()=>setPpView(k.v)} style={{background:PP.card,border:`1px solid ${ppView===k.v?PP.teal:PP.border}`,borderRadius:10,padding:"8px 12px",flex:1,cursor:"pointer",transition:"all .2s",transform:ppView===k.v?"translateY(-1px)":"none"}}>
+                  <div style={{fontSize:8,textTransform:"uppercase",letterSpacing:2,color:PP.muted,marginBottom:2,fontFamily:PPF}}>{k.label}</div>
+                  <div style={{fontSize:18,fontWeight:700,color:k.color,fontFamily:PPF}}>{k.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Filter row */}
+            <div style={{display:"flex",alignItems:"center",gap:6,padding:"0 14px 8px",flexWrap:"wrap",flexShrink:0}}>
+              {(()=>{
+                const inpSt={padding:"6px 10px",fontSize:12,background:PP.card,border:`1px solid ${PP.border}`,borderRadius:7,color:PP.soft,outline:"none",fontFamily:PPF};
+                const slSt={...inpSt,appearance:"none"};
+                return <>
+                  <input value={ppSearch} onChange={e=>setPpSearch(e.target.value)} placeholder="Search…" style={{...inpSt,width:140}}/>
+                  <select value={ppFP} onChange={e=>setPpFP(e.target.value)} style={slSt}><option value="">All Personas</option>{PP_PERSONAS.map(p=><option key={p}>{p}</option>)}</select>
+                  <select value={ppFT} onChange={e=>setPpFT(e.target.value)} style={slSt}><option value="">All Types</option>{["Bank","Credit Union","Other"].map(t=><option key={t}>{t}</option>)}</select>
+                  <select value={ppFS} onChange={e=>setPpFS(e.target.value)} style={slSt}><option value="">All States</option>{ppStates.map(s=><option key={s}>{s}</option>)}</select>
+                  <select value={ppFE} onChange={e=>setPpFE(e.target.value)} style={slSt}><option value="">All Emails</option><option value="has">Has Email</option><option value="no">No Email</option></select>
+                  {(ppSearch||ppFP||ppFT||ppFS||ppFE)&&<button onClick={()=>{setPpSearch("");setPpFP("");setPpFT("");setPpFS("");setPpFE("")}} style={{fontSize:11,color:PP.muted,background:"none",border:"none",cursor:"pointer",fontFamily:PPF}}>Clear</button>}
+                  <div style={{flex:1}}/>
+                  <span style={{fontSize:11,color:PP.muted,fontFamily:"'DM Mono',monospace"}}>{ppFiltered.length} leads</span>
+                </>;
+              })()}
+            </div>
+
+            {/* Status pill filters */}
+            <div style={{display:"flex",gap:6,padding:"0 14px 8px",overflowX:"auto",flexShrink:0,scrollbarWidth:"none",msOverflowStyle:"none"}}>
+              {[{id:"all",label:"All"},{id:"not_contacted",label:"Not Contacted"},{id:"request_sent",label:"Requested"},{id:"accepted_dm",label:"Accepted"},{id:"following_up",label:"Following Up"},{id:"replied_followup",label:"Replied"},{id:"due_today",label:"⚡ Due"},{id:"booked",label:"★ Booked"},{id:"second_call",label:"2nd Call"},{id:"not_interested",label:"Not Int."},{id:"closed",label:"Closed"}].map(v=>{
+                const ss=P_SS[v.id]||{};
+                return <button key={v.id} onClick={()=>{setPpView(v.id);setPpPgN(1)}} style={{padding:"5px 12px",fontSize:11,fontWeight:600,borderRadius:20,border:`1px solid ${ppView===v.id?(ss.dot||PP.teal):PP.border}`,background:ppView===v.id?(ss.bg||"rgba(0,219,168,.15)"):"transparent",color:ppView===v.id?(ss.text||PP.teal2):PP.muted,cursor:"pointer",fontFamily:PPF,whiteSpace:"nowrap",flexShrink:0,transition:"all .15s"}}>{v.label}</button>;
+              })}
+            </div>
+
+            {/* Loading */}
+            {ppLoading&&<div style={{padding:"12px 14px",flexShrink:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:18,height:18,border:`2px solid ${PP.border}`,borderTopColor:PP.teal,borderRadius:"50%",animation:"ppSpin .8s linear infinite"}}/>
+                <span style={{fontSize:13,color:PP.soft,fontFamily:PPF}}>Loading leads… {ppLoadProg.p>0&&`${ppLoadProg.p} / ${ppLoadProg.t}`}</span>
+              </div>
+            </div>}
+
+            {/* Lead list */}
+            <div style={{flex:1,overflowY:"auto",padding:"0 14px"}}>
+              {!ppLoading && ppPaged.length === 0 && <div style={{textAlign:"center",padding:"40px 0",color:PP.muted,fontFamily:PPF}}>No leads match filters</div>}
+              {!ppLoading && ppPaged.map(lead=>{
+                const nm=lead.full_name||`${lead.first_name||""} ${lead.last_name||""}`.trim();
+                const due=ppIsOv(lead.next_linkedin_followup_date)&&!["booked","second_call","not_interested","closed"].includes(lead.status);
+                const na=ppNextAction(lead);
+                return <div key={lead.id} onClick={()=>setPpSelectedLead(lead)} style={{background:PP.card,border:`1px solid ${due?"rgba(245,197,24,.35)":PP.border}`,borderRadius:12,padding:"12px 14px",marginBottom:8,cursor:"pointer",transition:"background .15s"}}
+                  onTouchStart={e=>e.currentTarget.style.background=PP.deep} onTouchEnd={e=>e.currentTarget.style.background=PP.card}
+                  onMouseEnter={e=>e.currentTarget.style.background=PP.deep} onMouseLeave={e=>e.currentTarget.style.background=PP.card}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:4}}>
+                    <div style={{fontWeight:600,fontSize:14,color:PP.white,fontFamily:PPF,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nm||"—"}</div>
+                    <div style={{position:"relative",flexShrink:0}} onClick={e=>e.stopPropagation()}>
+                      <PPStatusBadge status={lead.status} onClick={e=>{e.stopPropagation();setPpSDD(ppSDD===lead.id?null:lead.id)}}/>
+                      {ppSDD===lead.id&&<PPStatusDrop current={lead.status} onSel={s=>ppAct(lead.id,s)} onClose={()=>setPpSDD(null)}/>}
+                    </div>
+                  </div>
+                  <div style={{fontSize:12,color:PP.muted,fontFamily:PPF,marginBottom:due?4:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{[lead.title,lead.company].filter(Boolean).join(" · ")||"—"}</div>
+                  {lead.persona&&<span style={{fontSize:10,fontWeight:700,color:PP_PC[lead.persona]||PP.muted,fontFamily:PPF}}>{lead.persona}</span>}
+                  {due&&<div style={{fontSize:11,color:PP.gold,fontFamily:PPF,fontWeight:600,marginTop:4}}>⚡ Follow-up due: {ppFmtD(lead.next_linkedin_followup_date)}</div>}
+                  {na&&<div style={{marginTop:8}} onClick={e=>{e.stopPropagation();ppAct(lead.id,na.action)}}><span style={{fontSize:11,fontWeight:600,color:PP.white,background:na.bg,padding:"4px 10px",borderRadius:6,display:"inline-block"}}>{na.label}</span></div>}
+                </div>;
+              })}
+            </div>
+
+            {/* Pagination */}
+            {ppFiltered.length>0&&!ppLoading&&<div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px",borderTop:`1px solid ${PP.bL}`,flexShrink:0}}>
+              <span style={{fontSize:12,color:PP.muted}}>Pg {ppPgN}/{ppTotalPg||1}</span>
+              <PPBtn onClick={()=>setPpPgN(p=>Math.max(1,p-1))} disabled={ppPgN<=1} small ghost>←</PPBtn>
+              <PPBtn onClick={()=>setPpPgN(p=>Math.min(ppTotalPg,p+1))} disabled={ppPgN>=ppTotalPg} small ghost>→</PPBtn>
+              <div style={{flex:1}}/>
+              <span style={{fontSize:11,color:PP.muted}}>Show:</span>
+              {[25,50,100].map(n=><button key={n} onClick={()=>{setPpPgSz(n);setPpPgN(1)}} style={{padding:"3px 8px",fontSize:11,borderRadius:6,border:`1px solid ${ppPgSz===n?PP.teal:PP.border}`,background:ppPgSz===n?"rgba(0,219,168,.1)":"transparent",color:ppPgSz===n?PP.teal:PP.muted,cursor:"pointer",fontFamily:PPF}}>{n}</button>)}
+            </div>}
+
+            {/* Drawer */}
+            {ppSelectedLead&&<PPDrawer lead={ppLeads.find(l=>l.id===ppSelectedLead.id)||ppSelectedLead} onClose={()=>setPpSelectedLead(null)} onUpd={ppUpd} onAct={ppAct} onDel={id=>{ppDelLead(id);setPpSelectedLead(null)}} aiL={ppAiLoading}/>}
+
+            {/* Add Lead modal */}
+            {ppShowAdd&&<PPAddLead onClose={()=>setPpShowAdd(false)} onAdd={ppAddLeadFn}/>}
+
+            {/* Toast */}
+            {ppToast&&<div style={{position:"fixed",bottom:80,left:"50%",transform:"translateX(-50%)",zIndex:300,padding:"10px 20px",background:PP.card,border:`1px solid ${PP.border}`,borderRadius:12,fontSize:13,color:PP.soft,boxShadow:"0 8px 32px rgba(0,0,0,.5)",fontFamily:PPF,whiteSpace:"nowrap"}}>{ppToast}</div>}
+
+            <style>{`
+              @keyframes ppSpin{to{transform:rotate(360deg)}}
+              @keyframes ppSlideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+              @keyframes ppFadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+            `}</style>
           </div>
         )}
       </main>
