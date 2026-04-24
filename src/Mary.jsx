@@ -442,7 +442,9 @@ function buildPipelineSummary(leads) {
   return `Finoveo Pipeline — ${leads.length} total leads:\n${lines.join("\n")}`;
 }
 
-function findLeadBySearch(leads, query) {
+// preferLead: when multiple leads tie at the top score, prefer this one (e.g. lastDiscussedLeadRef).
+// If still ambiguous after preference check, return null so Claude asks for clarification.
+function findLeadBySearch(leads, query, preferLead = null) {
   const q = query.toLowerCase();
 
   // Words that are NOT name parts — used to gauge how many "name words" the query has
@@ -474,7 +476,45 @@ function findLeadBySearch(leads, query) {
   const minScore = Math.min(Math.max(queryNameWordCount, 1), 2);
   if (scored[0].score < minScore) return null;
 
-  return scored[0].l;
+  const topScore = scored[0].score;
+  const topMatches = scored.filter(x => x.score === topScore);
+
+  // Single clear winner — return it
+  if (topMatches.length === 1) return topMatches[0].l;
+
+  // Multiple leads tie at the top score (e.g. two people named "Andy").
+  // Prefer the lastDiscussedLead if it's one of the tied matches.
+  if (preferLead) {
+    const preferred = topMatches.find(x => x.l.id === preferLead.id);
+    if (preferred) return preferred.l;
+  }
+
+  // Still ambiguous — return null so Claude asks "which Andy do you mean?"
+  return null;
+}
+
+// Scan the last few chat messages for a specific pipeline stage being discussed.
+// Used to filter the injected lead list when the user asks follow-up questions like "who are they?".
+function detectRecentStage(messages) {
+  const stageMap = {
+    second_call:      ["second call", "2nd call"],
+    booked:           ["booked", "booking"],
+    accepted_dm:      ["accepted", "accepted dm"],
+    following_up:     ["following up", "follow-up stage", "followup stage"],
+    replied_followup: ["replied follow", "replied/follow"],
+    not_contacted:    ["not contacted"],
+    request_sent:     ["request sent", "requested"],
+    not_interested:   ["not interested"],
+    closed:           ["closed"],
+  };
+  // Look at the last 6 messages (3 turns) for stage keywords
+  const recentText = messages.slice(-6)
+    .map(m => (typeof m.content === "string" ? m.content : "").toLowerCase())
+    .join(" ");
+  for (const [stage, keywords] of Object.entries(stageMap)) {
+    if (keywords.some(k => recentText.includes(k))) return stage;
+  }
+  return null;
 }
 
 async function addOutboundLead(lead) {
@@ -1798,7 +1838,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
 
             // Always try to find a specific lead — even on Gmail queries, the record
             // gives useful context (email address, company) without the bulk of the full list
-            let specificMatch = findLeadBySearch(leads, msgLower);
+            let specificMatch = findLeadBySearch(leads, msgLower, lastDiscussedLeadRef.current);
 
             // If no name match but message uses a pronoun, resolve from the last discussed lead
             if (!specificMatch && hasPronounRef && lastDiscussedLeadRef.current) {
@@ -1830,23 +1870,30 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               // No specific person and not a Gmail task — inject compact list for
               // stage/count/general pipeline queries. Skip this for Gmail queries
               // to avoid combining a large lead list with email data (token overflow).
+
+              // If recent conversation was about a specific stage (e.g. "second call"),
+              // inject ONLY leads from that stage — avoids 40k cap truncating the answer.
+              const recentStage = detectRecentStage(chatHistory);
+              const sourceLeads = recentStage ? leads.filter(l => l.status === recentStage) : leads;
+
               const compact = l => {
                 const name = l.full_name || `${l.first_name} ${l.last_name}`.trim();
                 const due = l.next_linkedin_followup_date || "";
                 const email = l.email ? ` | ${l.email}` : "";
                 return `${name} | ${l.company} | ${l.title || ""} | ${l.state || ""} | ${l.status}${due ? " | due:" + due : ""}${email}`;
               };
-              const compactLines = leads.map(compact);
+              const compactLines = sourceLeads.map(compact);
               const MAX_CHARS = 40000;
               let listText = "";
               for (const line of compactLines) {
                 if ((listText + "\n" + line).length > MAX_CHARS) {
-                  listText += `\n... (${leads.length - listText.split("\n").length + 1} more leads truncated)`;
+                  listText += `\n... (${sourceLeads.length - listText.split("\n").length + 1} more leads truncated)`;
                   break;
                 }
                 listText += (listText ? "\n" : "") + line;
               }
-              extra += `\n\nAll leads:\n${listText}`;
+              const stageLabel = recentStage ? ` (${PIPELINE_STAGES[recentStage] || recentStage} stage only — ${sourceLeads.length} leads)` : "";
+              extra += `\n\nAll leads${stageLabel}:\n${listText}`;
             }
           }
         }
