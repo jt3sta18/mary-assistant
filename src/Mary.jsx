@@ -453,7 +453,7 @@ function findLeadBySearch(leads, query, preferLead = null) {
   // never cause false lead matches (e.g. "booked" or "stage" in "who is in the booked stage?").
   const NON_NAME = new Set([
     // Action / question words
-    "from","the","pipeline","please","their","about","with","that","this","what","have","does",
+    "from","the","pipeline","please","their","about","with","that","this","what","have","does","under","inside","within","above","below","section","currently","now",
     "lead","find","tell","update","delete","remove","add","note","status","email","call","book",
     "move","show","look","pull","info","contact","them","him","her","his","its","they","who",
     "yes","okay","sure","just","can","you","get","lets","please","deal","did","was","are",
