@@ -513,7 +513,7 @@ function detectRecentStage(messages) {
     second_call:      ["second call", "2nd call", "second_call"],
     booked:           ["booked", "booking"],
     accepted_dm:      ["accepted dm", "accepted/dm", "accepted and dm"],
-    following_up:     ["following up", "follow-up stage", "followup stage", "follow up stage"],
+    following_up:     ["following up", "followed up", "follow up with", "needs follow", "follow-up stage", "followup stage", "follow up stage"],
     replied_followup: ["replied follow", "replied/follow", "replied to follow"],
     not_contacted:    ["not contacted", "not_contacted", "haven't contacted"],
     request_sent:     ["request sent", "request_sent", "pending request"],
@@ -1854,7 +1854,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       }
 
       // ─── Finoveo Pipeline — inject when relevant ──────────────────────
-      const pipelineKeywords = ["lead","pipeline","prospect","booked","outreach","outbound","stage","follow up","followup","follow-up","dm sent","second call","2nd call","not interested","crm","closed","request sent","accepted","where is","what stage","status of","update on","check on","any update","progress on","responded","pitched","due today","overdue","who have i","who did i","my leads","contacted","not contacted","asset","institution","bank","credit union","score","persona","notes","email address","their email","whose email","add a note","append note","update note","delete lead","remove lead","move to","change status","show me","find me","look up","tell me about","pull up","info on","details on","what about","how is","who is"];
+      const pipelineKeywords = ["lead","pipeline","prospect","booked","outreach","outbound","stage","follow up","followup","follow-up","followed up","following up","follow up with","needs follow","who needs","dm sent","second call","2nd call","not interested","crm","closed","request sent","accepted","where is","what stage","status of","update on","check on","any update","progress on","responded","pitched","due today","overdue","who have i","who did i","my leads","contacted","not contacted","asset","institution","bank","credit union","score","persona","notes","email address","their email","whose email","add a note","append note","update note","delete lead","remove lead","move to","change status","show me","find me","look up","tell me about","pull up","info on","details on","what about","how is","who is"];
       const hasProperName = /\b[A-Z][a-z]{1,}(\s+[A-Z][a-z]{1,})?\b/.test(msg);
       // Check message words against cached lead names — works even when typed lowercase
       const cachedLeads = pipelineCacheRef.current?.leads || [];
