@@ -2499,7 +2499,10 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
           <div style={S.anim}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
               <div style={S.secTitle}>Unread Work Emails</div>
-              <button onClick={() => { const t = localStorage.getItem("mary-google-token"); if (t) fetchGmailEmails(t).then(filterDismissed).then(setInboxEmails).catch(()=>{}); }} style={S.refreshBtn}>↻ Refresh</button>
+              <div style={{display:"flex",gap:8}}>
+                {inboxEmails.length > 1 && <button onClick={() => { inboxEmails.forEach(e => persistDismissedEmailId(e.id)); setInboxEmails([]); }} style={{...S.refreshBtn, color:"rgba(255,100,100,0.7)"}}>✕ Dismiss all</button>}
+                <button onClick={() => { const t = localStorage.getItem("mary-google-token"); if (t) fetchGmailEmails(t).then(filterDismissed).then(setInboxEmails).catch(()=>{}); }} style={S.refreshBtn}>↻ Refresh</button>
+              </div>
             </div>
             {!googleToken && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>📧</div><div style={{fontSize:16,fontWeight:600}}>Google not connected</div><div style={{fontSize:13,marginTop:4,color:"#7A7A85"}}>Connect Google to see your inbox</div></div>}
             {googleToken && !inboxEmails.length && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>📭</div><div style={{fontSize:16,fontWeight:600}}>Inbox clear</div><div style={{fontSize:13,marginTop:4,color:"#7A7A85"}}>No unread work emails</div></div>}
