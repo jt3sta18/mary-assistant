@@ -66,7 +66,6 @@ Banks and credit unions only see transaction history — not customer intent. Th
 - Purpose-built for credit unions — member-centric, cooperative values.
 
 ## Brand
-- Colors: Navy (#071428), Teal (#00DBA8/#00F5C0), Blue (#1A6EE0/#38AAFF), Gold (#F5C518)
 - Tone: Confident, direct, C-suite level, outcomes-first. Never feature-first.
 - NOT a financial advisor, broker, or lender.
 `;
@@ -99,6 +98,9 @@ CAPABILITIES:
 Pipeline stages (in order): not_contacted → request_sent → accepted_dm → following_up → replied_followup → booked → second_call → not_interested → closed
 Lead fields: id, first_name, last_name, full_name, email, title, company, institution_type, state, asset_size, status, persona, linkedin_step, lead_score, next_followup (next LinkedIn follow-up date), notes (activity notes/history for the lead)
 
+- VIKTOR: James uses Viktor (an AI in Slack) for outbound follow-ups, pipeline reminders, and task management. Do NOT create reminders, tasks, or suggest follow-up actions — those go to Viktor, not Mary. If James asks to be reminded of something, say "I'll leave that to Viktor — just message him in Slack."
+- MOBILE: Mary is used on the go from a phone. Keep every response under 100 words unless James explicitly asks for more detail. Use bullet points. Lead with the answer, not the explanation.
+
 RULES:
 - When calendar events are provided in the message, use them to answer scheduling questions accurately.
 - When asked to remind them of something, create a reminder with a specific time.
@@ -110,16 +112,10 @@ RULES:
 - Always respond in JSON format with this exact structure:
 {
   "message": "Your response text here",
-  "tasks_to_add": [{"title": "task name", "due": "ISO date string or null", "priority": "high|medium|low"}],
-  "tasks_to_complete": ["task title to mark done"],
-  "clear_reminders": "all | fired | [\"specific reminder title\"]",
   "calendar_events": [{"title": "event name", "start": "ISO datetime", "end": "ISO datetime", "location": "optional"}],
-  "reminders": [{"title": "reminder text", "time": "ISO datetime string for when to fire the notification"}],
-  "bible_verse": {"text": "The verse text", "reference": "Book Chapter:Verse"},
   "send_email": {"to": "recipient@email.com", "subject": "Email subject", "body": "Full email body text"},
   "search_gmail": {"query": "from:john subject:meeting", "max_results": 10},
   "create_events": [{"title": "event name", "start": "ISO datetime", "end": "ISO datetime", "location": "optional"}],
-  "suggested_tasks": [{"title": "task name", "priority": "high|medium|low", "reason": "brief reason why"}],
   "save_memory": ["concise fact to remember, written as a statement"],
   "create_sheet": {"title": "Sheet name", "values": [["Col A", "Col B"], ["row1a", "row1b"]]},
   "write_to_sheet": {"spreadsheetId": "sheet_id_here", "range": "Sheet1", "values": [["row1a", "row1b"]]},
@@ -1044,6 +1040,7 @@ export default function Mary() {
   const [tasks, setTasks] = useState([]);
   const [reminders, setReminders] = useState([]);
   const [chat, setChat] = useState([]);
+  const [chatSessions, setChatSessions] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [events, setEvents] = useState([]);
@@ -1083,6 +1080,7 @@ export default function Mary() {
   const pipelineCacheRef = useRef(null);   // { leads: [...], ts: Date.now() }
   const pipelineFetchingRef = useRef(false); // prevents duplicate in-flight fetches
   const lastDiscussedLeadRef = useRef(null); // last lead specifically matched in a message
+  const emailSwipeRef = useRef({ startX: 0, idx: null });
 
   // ─── Pipeline Tab State ──────────────────────────────────────────────
   const [ppLeads, setPpLeads] = useState([]);
@@ -1108,6 +1106,7 @@ export default function Mary() {
     (async () => {
       setTasks(await loadData("mary-tasks", []));
       setChat(await loadData("mary-chat", []));
+      setChatSessions(await loadData("mary-chat-sessions", []));
       setReminders(await loadData("mary-reminders", []));
       setSuggestedTasks(await loadData("mary-suggested-tasks", []));
       // Load cached briefing if from today
@@ -2507,7 +2506,11 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
             {!googleToken && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>📧</div><div style={{fontSize:16,fontWeight:600}}>Google not connected</div><div style={{fontSize:13,marginTop:4,color:"#7A7A85"}}>Connect Google to see your inbox</div></div>}
             {googleToken && !inboxEmails.length && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>📭</div><div style={{fontSize:16,fontWeight:600}}>Inbox clear</div><div style={{fontSize:13,marginTop:4,color:"#7A7A85"}}>No unread work emails</div></div>}
             {inboxEmails.map((email, i) => (
-              <div key={i} style={{...S.card, marginBottom:10}}>
+              <div key={i}
+                onTouchStart={(e) => { emailSwipeRef.current = { startX: e.touches[0].clientX, idx: i }; e.currentTarget.style.transition = 'none'; }}
+                onTouchMove={(e) => { if (emailSwipeRef.current.idx !== i) return; const dx = Math.min(0, e.touches[0].clientX - emailSwipeRef.current.startX); if (dx < 0) { e.currentTarget.style.transform = `translateX(${dx}px)`; e.currentTarget.style.opacity = String(Math.max(0, 1 + dx / 120)); } }}
+                onTouchEnd={(e) => { if (emailSwipeRef.current.idx !== i) return; const dx = e.changedTouches[0].clientX - emailSwipeRef.current.startX; if (dx < -80) { e.currentTarget.style.transition = 'transform 0.25s ease, opacity 0.25s ease'; e.currentTarget.style.transform = 'translateX(-110%)'; e.currentTarget.style.opacity = '0'; setTimeout(() => { persistDismissedEmailId(email.id); setInboxEmails(p => p.filter((_, idx) => idx !== i)); }, 240); } else { e.currentTarget.style.transition = 'transform 0.3s ease'; e.currentTarget.style.transform = 'translateX(0)'; e.currentTarget.style.opacity = '1'; } emailSwipeRef.current = { startX: 0, idx: null }; }}
+                style={{...S.card, marginBottom:10}}>
                 <div style={{fontSize:12,color:"#60A5FA",fontWeight:600,marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{email.from?.replace(/<.*>/, "").trim()}</div>
                 <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>{email.subject}</div>
                 <div style={{fontSize:12,color:"rgba(255,255,255,0.5)",lineHeight:1.5,marginBottom:10}}>{email.snippet}</div>
@@ -2593,7 +2596,15 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                 </div>
               </div>
               {chat.length > 0 && (
-                <button onClick={() => { setChat([]); saveData("mary-chat", []); }} style={S.newChatBtn}>✕ New chat</button>
+                <button onClick={() => {
+                  if (chat.length > 1) {
+                    const session = { id: Date.now(), date: new Date().toISOString(), preview: chat.find(m => m.role === "user")?.text?.slice(0, 60) || "Conversation", messages: chat.slice(-20) };
+                    const updated = [session, ...chatSessions].slice(0, 5);
+                    setChatSessions(updated);
+                    saveData("mary-chat-sessions", updated);
+                  }
+                  setChat([]); saveData("mary-chat", []);
+                }} style={S.newChatBtn}>✕ New chat</button>
               )}
             </div>
             {/* ── Scrollable messages — fully independent ── */}
@@ -2603,10 +2614,21 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                   <div style={{...gradText, fontSize: 28, fontWeight: 800, letterSpacing: "-1px", marginBottom: 4}}>Mary</div>
                   <div style={{fontSize:13,lineHeight:1.5,marginBottom:16,color:"rgba(255,255,255,0.45)"}}>Ask about your schedule, send emails, set reminders, manage tasks — naturally.</div>
                   <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                    {["What's on my calendar today?","Remind me at 3pm to call the client","Send an email to my team about Friday's meeting","Check my inbox for anything from Finoveo","Do I have any conflicts this week?"].map((s) => (
+                    {["What's on my calendar today?","How many leads are due in the pipeline?","Summarize my unread emails","Draft an email to a prospect","Search Gmail for messages from Beverly Credit Union"].map((s) => (
                       <button key={s} onClick={() => { setInput(s); setTimeout(() => inputRef.current?.focus(), 100); }} style={S.sug}>{s}</button>
                     ))}
                   </div>
+                  {chatSessions.length > 0 && (
+                    <div style={{marginTop:24,textAlign:"left"}}>
+                      <div style={{fontSize:10,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Mono',monospace",letterSpacing:"0.15em",textTransform:"uppercase",marginBottom:10}}>Recent</div>
+                      {chatSessions.slice(0,3).map((s) => (
+                        <button key={s.id} onClick={() => { setChat(s.messages); saveData("mary-chat", s.messages); }} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",width:"100%",padding:"10px 14px",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,marginBottom:8,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
+                          <div style={{fontSize:12,fontWeight:500,color:"rgba(255,255,255,0.7)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",width:"100%"}}>{s.preview}</div>
+                          <div style={{fontSize:10,color:"rgba(255,255,255,0.3)",marginTop:3,fontFamily:"'DM Mono',monospace"}}>{new Date(s.date).toLocaleDateString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
               {chat.map((m, i) => (
