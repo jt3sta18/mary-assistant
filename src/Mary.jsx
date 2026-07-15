@@ -2317,13 +2317,17 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
 
   const ppTogSort = f => { if(ppSortBy===f) setPpSortDir(d=>d==="asc"?"desc":"asc"); else{setPpSortBy(f);setPpSortDir("asc")} };
 
+  const TAB_ICON = {
+    today:    (on) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={on?"#1FCD79":"#56657A"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+    inbox:    (on) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={on?"#1FCD79":"#56657A"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
+    chat:     (on) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={on?"#1FCD79":"#56657A"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>,
+    pipeline: (on) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={on?"#1FCD79":"#56657A"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+  };
   const TABS = [
-    { k: "today", icon: "◈", label: "Today" },
-    { k: "tasks", icon: "☐", label: "Tasks", badge: openTasks.length },
-    { k: "inbox", icon: "✉", label: "Inbox", badge: inboxEmails.length },
-    { k: "reminders", icon: "⏰", label: "Alerts", badge: pending.length },
-    { k: "chat", icon: "✦", label: "Chat" },
-    { k: "pipeline", icon: "◈", label: "Pipeline" },
+    { k: "today",    label: "Today" },
+    { k: "inbox",    label: "Inbox",    badge: inboxEmails.length },
+    { k: "chat",     label: "Chat" },
+    { k: "pipeline", label: "Pipeline" },
   ];
 
   return (
@@ -2353,7 +2357,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
             <div style={S.dateLbl}>{dateStr}</div>
           </div>
           <div style={{display:"flex",alignItems:"center"}}>
-            {googleToken && <div style={{fontSize:10,color:"#7A7A85",cursor:"pointer"}} onClick={disconnectGoogle}>✓ Google connected</div>}
+            {googleToken && <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",cursor:"pointer"}} onClick={disconnectGoogle}>✓ Google connected</div>}
           </div>
         </div>
         <div style={S.poweredBy}>
@@ -2384,7 +2388,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               <div style={S.gcBanner}>
                 <div style={{flex:1}}>
                   <div style={{fontSize:13,fontWeight:600,color:"#fff",marginBottom:2}}>📅 Connect Google Calendar</div>
-                  <div style={{fontSize:12,color:"#7A7A85"}}>See your real schedule in the daily briefing</div>
+                  <div style={{fontSize:12,color:"rgba(255,255,255,0.45)"}}>See your real schedule in the daily briefing</div>
                 </div>
                 <button onClick={connectGoogle} disabled={googleLoading} style={S.gcBtn}>{googleLoading ? "..." : "Connect"}</button>
               </div>
@@ -2425,7 +2429,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                 <div style={S.cHead}><div style={{...S.headDot,background:"#3B82F6"}} /><span style={S.cTitle}>Tomorrow's Preview</span>
                   {!tomorrowPreview && <button onClick={fetchTomorrow} style={S.refreshBtn}>Load →</button>}
                 </div>
-                {tomorrowLoading ? <div style={S.skelWrap}><div style={S.skel}/><div style={{...S.skel,width:"70%"}}/></div> : tomorrowPreview ? <div style={S.bText}>{tomorrowPreview}</div> : <div style={{fontSize:13,color:"#7A7A85",fontWeight:300}}>Tap "Load" to preview tomorrow's schedule</div>}
+                {tomorrowLoading ? <div style={S.skelWrap}><div style={S.skel}/><div style={{...S.skel,width:"70%"}}/></div> : tomorrowPreview ? <div style={S.bText}>{tomorrowPreview}</div> : <div style={{fontSize:13,color:"rgba(255,255,255,0.35)",fontWeight:300}}>Tap "Load" to preview tomorrow's schedule</div>}
               </div>
             )}
 
@@ -2478,7 +2482,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                       <div style={{...S.pDot,background:PC[t.priority]||PC.medium}}/>
                       <div>
                         <div style={{fontSize:13,fontWeight:500}}>{t.title}</div>
-                        {t.reason && <div style={{fontSize:11,color:"#7A7A85"}}>{t.reason}</div>}
+                        {t.reason && <div style={{fontSize:11,color:"rgba(255,255,255,0.45)"}}>{t.reason}</div>}
                       </div>
                     </div>
                     <button onClick={() => { addTask(t.title, null, t.priority || "medium"); setSuggestedTasks(p => { const n = p.filter((_,idx)=>idx!==i); saveData("mary-suggested-tasks",n); return n; }); }} style={{...S.gcBtn, fontSize:10, padding:"4px 10px"}}>+ Add</button>
@@ -2541,16 +2545,16 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
             {googleToken && !inboxEmails.length && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>📭</div><div style={{fontSize:16,fontWeight:600}}>Inbox clear</div><div style={{fontSize:13,marginTop:4,color:"#7A7A85"}}>No unread work emails</div></div>}
             {inboxEmails.map((email, i) => (
               <div key={i} style={{...S.card, marginBottom:10}}>
-                <div style={{fontSize:12,color:"#102691",fontWeight:600,marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{email.from?.replace(/<.*>/, "").trim()}</div>
+                <div style={{fontSize:12,color:"#60A5FA",fontWeight:600,marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{email.from?.replace(/<.*>/, "").trim()}</div>
                 <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>{email.subject}</div>
-                <div style={{fontSize:12,color:"#7A7A85",lineHeight:1.5,marginBottom:10}}>{email.snippet}</div>
+                <div style={{fontSize:12,color:"rgba(255,255,255,0.5)",lineHeight:1.5,marginBottom:10}}>{email.snippet}</div>
                 {replyingTo === i ? (
                   <div>
                     <textarea
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
                       placeholder="Write your reply..."
-                      style={{width:"100%",background:"#F8F8F7",border:"1px solid #E8E8E4",borderRadius:8,color:"#14141A",fontSize:13,padding:"8px 10px",fontFamily:"'Geist',sans-serif",resize:"vertical",minHeight:80,outline:"none",boxSizing:"border-box"}}
+                      style={{width:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"rgba(255,255,255,0.88)",fontSize:13,padding:"8px 10px",fontFamily:"'Geist',sans-serif",resize:"vertical",minHeight:80,outline:"none",boxSizing:"border-box"}}
                     />
                     <div style={{display:"flex",gap:8,marginTop:8}}>
                       <button disabled={replySending || !replyText.trim()} onClick={async () => {
@@ -2565,14 +2569,14 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                         } catch { alert("Failed to send reply"); }
                         setReplySending(false);
                       }} style={{...S.gcBtn, flex:1}}>{replySending ? "Sending..." : "Send Reply"}</button>
-                      <button onClick={() => { setReplyingTo(null); setReplyText(""); }} style={{...S.gcBtn, background:"#F8F8F7", color:"#7A7A85", border:"1px solid #E8E8E4"}}>Cancel</button>
+                      <button onClick={() => { setReplyingTo(null); setReplyText(""); }} style={{...S.gcBtn, background:"rgba(255,255,255,0.05)", color:"rgba(255,255,255,0.45)", border:"1px solid rgba(255,255,255,0.08)"}}>Cancel</button>
                     </div>
                   </div>
                 ) : (
                   <div style={{display:"flex",gap:8}}>
                     <button onClick={() => { setReplyingTo(i); setReplyText(""); }} style={{...S.gcBtn, fontSize:11, padding:"5px 12px"}}>↩ Reply</button>
-                    <button onClick={() => { setTab("chat"); setTimeout(() => { setInput(`Draft a reply to ${email.from?.replace(/<.*>/, "").trim()} about: "${email.subject}"`); inputRef.current?.focus(); }, 100); }} style={{...S.gcBtn, fontSize:11, padding:"5px 12px", background:"#DBEAFE", color:"#1D4ED8", border:"none"}}>✦ Ask Mary</button>
-                    <button onClick={() => { persistDismissedEmailId(email.id); setInboxEmails(p => p.filter((_, idx) => idx !== i)); }} style={{...S.gcBtn, fontSize:11, padding:"5px 12px", background:"#F8F8F7", color:"#7A7A85", border:"1px solid #E8E8E4", marginLeft:"auto"}}>✕ Dismiss</button>
+                    <button onClick={() => { setTab("chat"); setTimeout(() => { setInput(`Draft a reply to ${email.from?.replace(/<.*>/, "").trim()} about: "${email.subject}"`); inputRef.current?.focus(); }, 100); }} style={{...S.gcBtn, fontSize:11, padding:"5px 12px", background:"rgba(59,130,246,0.15)", color:"#60A5FA", border:"none"}}>✦ Ask Mary</button>
+                    <button onClick={() => { persistDismissedEmailId(email.id); setInboxEmails(p => p.filter((_, idx) => idx !== i)); }} style={{...S.gcBtn, fontSize:11, padding:"5px 12px", background:"rgba(255,255,255,0.05)", color:"rgba(255,255,255,0.4)", border:"1px solid rgba(255,255,255,0.08)", marginLeft:"auto"}}>✕ Dismiss</button>
                   </div>
                 )}
               </div>
@@ -2611,9 +2615,9 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               </div>
             )}
             {notifPerm !== "granted" && (
-              <div style={{...S.card,marginTop:16,borderColor:"#FDE68A",background:"#FFFBE5"}}>
-                <div style={{fontSize:13,fontWeight:600,color:"#92400E"}}>⚠️ Notifications not enabled</div>
-                <div style={{fontSize:12,color:"#78350F",marginBottom:10}}>Enable to receive push alerts for your reminders.</div>
+              <div style={{...S.card,marginTop:16,borderColor:"rgba(31,205,121,0.2)"}}>
+                <div style={{fontSize:13,fontWeight:600,color:"#1FCD79"}}>⚠️ Notifications not enabled</div>
+                <div style={{fontSize:12,color:"rgba(255,255,255,0.45)",marginBottom:10}}>Enable to receive push alerts for your reminders.</div>
                 <button onClick={enableNotif} style={S.qBtn}>Enable Notifications</button>
               </div>
             )}
@@ -2906,7 +2910,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         {TABS.map((t) => (
           <button key={t.k} onClick={() => setTab(t.k)} style={{...S.navBtn, ...(tab===t.k?S.navBtnOn:{})}}>
             <div style={{position:"relative",display:"inline-block"}}>
-              <span style={{fontSize:18,lineHeight:1}}>{t.icon}</span>
+              {TAB_ICON[t.k](tab===t.k)}
               {t.badge > 0 && <span style={S.badge}>{t.badge}</span>}
             </div>
             <span style={S.navLbl}>{t.label}</span>
@@ -2915,12 +2919,6 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         ))}
       </nav>
 
-      {/* Floating Ask Mary button — shown on all tabs except chat */}
-      {tab !== "chat" && (
-        <button onClick={() => setTab("chat")} style={S.fab}>
-          <span style={{fontSize:20}}>✦</span>
-        </button>
-      )}
 
       <style>{`
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -2939,77 +2937,66 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
 }
 
 const S = {
-  // Root & background — light paper
-  root: { fontFamily: "'Geist', -apple-system, sans-serif", background: "#FCFCFB", color: "#14141A", height: "100dvh", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" },
+  root: { fontFamily: "'Geist', -apple-system, sans-serif", background: "#080E1A", color: "#F0F2F5", height: "100dvh", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" },
   blob1: { display: "none" },
   blob2: { display: "none" },
   blob3: { display: "none" },
-  // Notif banner
-  notifBanner: { background: "#E6F7EF", borderBottom: "1px solid rgba(31,205,121,0.2)", padding: "10px 16px", position: "relative", zIndex: 10 },
+  notifBanner: { background: "rgba(31,205,121,0.08)", borderBottom: "1px solid rgba(31,205,121,0.15)", padding: "10px 16px", position: "relative", zIndex: 10 },
   notifRow: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 },
-  notifTitle: { fontSize: 12, fontWeight: 600, color: "#056B3A" },
-  notifDesc: { fontSize: 11, color: "#7A7A85" },
+  notifTitle: { fontSize: 12, fontWeight: 600, color: "#1FCD79" },
+  notifDesc: { fontSize: 11, color: "rgba(255,255,255,0.45)" },
   notifBtn: { padding: "6px 16px", background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: 999, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Geist', sans-serif", whiteSpace: "nowrap" },
-  // Header — light frosted glass
-  header: { padding: "20px 20px 14px", background: "rgba(252,252,251,0.92)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderBottom: "1px solid #E8E8E4", position: "relative", zIndex: 10 },
+  header: { padding: "20px 20px 14px", background: "rgba(8,14,26,0.96)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.07)", position: "relative", zIndex: 10 },
   headerRow: { display: "flex", justifyContent: "space-between", alignItems: "center" },
-  logo: { fontSize: 22, fontWeight: 600, letterSpacing: "-0.5px", lineHeight: 1, color: "#14141A" },
-  dateLbl: { fontSize: 10, color: "#7A7A85", marginTop: 4, fontWeight: 500, fontFamily: "'Geist Mono', monospace", textTransform: "uppercase", letterSpacing: "0.15em" },
-  greet: { fontSize: 12, color: "#7A7A85", fontWeight: 400, textAlign: "right" },
-  poweredBy: { display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: 10, color: "#7A7A85", fontWeight: 500, fontFamily: "'Geist Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase" },
+  logo: { fontSize: 22, fontWeight: 600, letterSpacing: "-0.5px", lineHeight: 1, color: "#F0F2F5" },
+  dateLbl: { fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 4, fontWeight: 500, fontFamily: "'Geist Mono', monospace", textTransform: "uppercase", letterSpacing: "0.15em" },
+  greet: { fontSize: 12, color: "rgba(255,255,255,0.35)", fontWeight: 400, textAlign: "right" },
+  poweredBy: { display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 500, fontFamily: "'Geist Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase" },
   liveDot: { width: 6, height: 6, borderRadius: "50%", background: "#1FCD79", animation: "livePulse 2s ease-in-out infinite" },
-  // Main
-  main: { flex: 1, padding: "16px 16px 100px", overflowY: "auto", position: "relative", zIndex: 1 },
+  main: { flex: 1, padding: "16px 16px 90px", overflowY: "auto", position: "relative", zIndex: 1 },
   anim: { animation: "slideUp 0.3s cubic-bezier(0.16,1,0.3,1)" },
-  // Cards — clean white with border
-  card: { background: "#FFFFFF", borderRadius: 16, padding: 16, marginBottom: 12, border: "1px solid #E8E8E4", boxShadow: "0 1px 4px rgba(20,20,26,0.04)" },
+  card: { background: "#0F1628", borderRadius: 16, padding: 16, marginBottom: 12, border: "1px solid rgba(255,255,255,0.07)", boxShadow: "0 2px 16px rgba(0,0,0,0.25)" },
   cHead: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 },
   headDot: { width: 6, height: 6, borderRadius: "50%", background: "#1FCD79", flexShrink: 0 },
-  cTitle: { fontSize: 10, fontWeight: 500, flex: 1, textTransform: "uppercase", letterSpacing: "0.18em", color: "#7A7A85", fontFamily: "'Geist Mono', monospace" },
-  seeAll: { background: "none", border: "none", color: "#14141A", fontSize: 13, cursor: "pointer", fontFamily: "'Geist', sans-serif", fontWeight: 500 },
-  refreshBtn: { background: "#F5F5F2", border: "1px solid #E8E8E4", borderRadius: 8, color: "#7A7A85", fontSize: 10, cursor: "pointer", fontFamily: "'Geist', sans-serif", fontWeight: 500, padding: "4px 10px" },
-  tomorrowCard: { background: "#FFFFFF", borderRadius: 16, padding: 16, marginBottom: 12, border: "1px solid #E8E8E4", boxShadow: "0 1px 4px rgba(20,20,26,0.04)" },
-  bText: { fontSize: 14, lineHeight: 1.75, color: "#3A3A45", fontWeight: 400 },
-  // Bible verse — dark navy card (intentional brand contrast)
-  verseCard: { background: "linear-gradient(165deg, #0A1233 0%, #050B25 100%)", borderRadius: 20, padding: "24px 20px", marginBottom: 12, border: "none", position: "relative", overflow: "hidden", boxShadow: "0 4px 24px rgba(10,18,51,0.18)" },
-  verseMark: { position: "absolute", top: -10, left: 12, fontSize: 80, opacity: 0.05, color: "#1FCD79", lineHeight: 1, fontFamily: "Georgia, serif", pointerEvents: "none" },
-  verseText: { fontSize: 15, lineHeight: 1.8, color: "rgba(255,255,255,0.9)", fontWeight: 300, fontStyle: "italic", marginBottom: 14, fontFamily: "Georgia, serif", position: "relative" },
+  cTitle: { fontSize: 10, fontWeight: 500, flex: 1, textTransform: "uppercase", letterSpacing: "0.18em", color: "rgba(255,255,255,0.3)", fontFamily: "'Geist Mono', monospace" },
+  seeAll: { background: "none", border: "none", color: "rgba(255,255,255,0.6)", fontSize: 13, cursor: "pointer", fontFamily: "'Geist', sans-serif", fontWeight: 500 },
+  refreshBtn: { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "rgba(255,255,255,0.35)", fontSize: 10, cursor: "pointer", fontFamily: "'Geist', sans-serif", fontWeight: 500, padding: "4px 10px" },
+  tomorrowCard: { background: "#0F1628", borderRadius: 16, padding: 16, marginBottom: 12, border: "1px solid rgba(255,255,255,0.07)", boxShadow: "0 2px 16px rgba(0,0,0,0.25)" },
+  bText: { fontSize: 14, lineHeight: 1.75, color: "rgba(255,255,255,0.78)", fontWeight: 400 },
+  verseCard: { background: "linear-gradient(165deg, #111E3C 0%, #0A1228 100%)", borderRadius: 20, padding: "24px 20px", marginBottom: 12, border: "1px solid rgba(255,255,255,0.08)", position: "relative", overflow: "hidden", boxShadow: "0 4px 24px rgba(0,0,0,0.4)" },
+  verseMark: { position: "absolute", top: -10, left: 12, fontSize: 80, opacity: 0.06, color: "#1FCD79", lineHeight: 1, fontFamily: "Georgia, serif", pointerEvents: "none" },
+  verseText: { fontSize: 15, lineHeight: 1.8, color: "rgba(255,255,255,0.88)", fontWeight: 300, fontStyle: "italic", marginBottom: 14, fontFamily: "Georgia, serif", position: "relative" },
   verseFooter: { display: "flex", justifyContent: "space-between", alignItems: "center" },
   verseRef: { fontSize: 11, fontWeight: 600, color: "#1FCD79", letterSpacing: "0.08em", fontFamily: "'Geist Mono', monospace" },
-  shareBtn: { padding: "5px 14px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 999, color: "rgba(255,255,255,0.8)", fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "'Geist', sans-serif" },
+  shareBtn: { padding: "5px 14px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 999, color: "rgba(255,255,255,0.65)", fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "'Geist', sans-serif" },
   skelWrap: { display: "flex", flexDirection: "column", gap: 8 },
-  skel: { height: 13, background: "#F0F0EC", borderRadius: 6, animation: "pulse 1.5s ease-in-out infinite" },
-  // Events
-  evItem: { display: "flex", gap: 12, alignItems: "flex-start", padding: "10px 0", borderBottom: "1px solid #F0F0EC" },
-  evTime: { fontSize: 11, fontWeight: 500, color: "#102691", minWidth: 65, paddingTop: 2, fontFamily: "'Geist Mono', monospace", letterSpacing: "0.04em" },
+  skel: { height: 13, background: "rgba(255,255,255,0.06)", borderRadius: 6, animation: "pulse 1.5s ease-in-out infinite" },
+  evItem: { display: "flex", gap: 12, alignItems: "flex-start", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" },
+  evTime: { fontSize: 11, fontWeight: 500, color: "#1FCD79", minWidth: 65, paddingTop: 2, fontFamily: "'Geist Mono', monospace", letterSpacing: "0.04em" },
   evInfo: { flex: 1 },
-  evTitle: { fontSize: 14, fontWeight: 500, color: "#14141A" },
-  evLoc: { fontSize: 12, color: "#7A7A85", marginTop: 2 },
-  durPill: { fontSize: 9, fontWeight: 600, color: "#3B82F6", background: "#DBEAFE", borderRadius: 999, padding: "2px 8px", flexShrink: 0, fontFamily: "'Geist Mono', monospace" },
-  // Mini tasks
+  evTitle: { fontSize: 14, fontWeight: 500, color: "#F0F2F5" },
+  evLoc: { fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 2 },
+  durPill: { fontSize: 9, fontWeight: 600, color: "#60A5FA", background: "rgba(59,130,246,0.15)", borderRadius: 999, padding: "2px 8px", flexShrink: 0, fontFamily: "'Geist Mono', monospace" },
   mini: { display: "flex", alignItems: "center", gap: 8, padding: "7px 0" },
   pDot: { width: 6, height: 6, borderRadius: "50%", flexShrink: 0 },
-  miniT: { fontSize: 13, flex: 1, fontWeight: 400, color: "#14141A" },
-  miniD: { fontSize: 11, color: "#7A7A85", fontFamily: "'Geist Mono', monospace" },
-  // Quick actions
+  miniT: { fontSize: 13, flex: 1, fontWeight: 400, color: "#F0F2F5" },
+  miniD: { fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'Geist Mono', monospace" },
   qActions: { display: "flex", gap: 8, marginTop: 8 },
-  qBtn: { flex: 1, padding: "14px 16px", background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: 14, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "'Geist', sans-serif" },
-  qBtn2: { flex: 1, padding: "14px 16px", background: "#FFFFFF", color: "#14141A", border: "1px solid #E8E8E4", borderRadius: 14, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "'Geist', sans-serif" },
-  // Tasks
+  qBtn: { flex: 1, padding: "14px 16px", background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: 14, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Geist', sans-serif" },
+  qBtn2: { flex: 1, padding: "14px 16px", background: "rgba(255,255,255,0.06)", color: "#F0F2F5", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 14, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "'Geist', sans-serif" },
   addRow: { display: "flex", gap: 8, marginBottom: 16 },
-  addIn: { flex: 1, padding: "12px 14px", background: "#FFFFFF", border: "1px solid #E8E8E4", borderRadius: 12, color: "#14141A", fontSize: 14, fontFamily: "'Geist', sans-serif", outline: "none", fontWeight: 400 },
+  addIn: { flex: 1, padding: "12px 14px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, color: "#F0F2F5", fontSize: 14, fontFamily: "'Geist', sans-serif", outline: "none", fontWeight: 400 },
   addBtn: { width: 44, height: 44, background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: 12, fontSize: 22, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
-  empty: { textAlign: "center", padding: "48px 20px", color: "#7A7A85" },
-  secTitle: { fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.18em", color: "#7A7A85", marginBottom: 10, fontFamily: "'Geist Mono', monospace" },
-  tItem: { display: "flex", alignItems: "center", gap: 10, padding: "12px 0", borderBottom: "1px solid #F0F0EC" },
+  empty: { textAlign: "center", padding: "48px 20px", color: "rgba(255,255,255,0.35)" },
+  secTitle: { fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.18em", color: "rgba(255,255,255,0.3)", marginBottom: 10, fontFamily: "'Geist Mono', monospace" },
+  tItem: { display: "flex", alignItems: "center", gap: 10, padding: "12px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" },
   chk: { background: "none", border: "none", color: "#1FCD79", fontSize: 20, cursor: "pointer", padding: 0, lineHeight: 1 },
-  del: { background: "none", border: "none", color: "#B5B5BD", fontSize: 14, cursor: "pointer", padding: 4 },
-  clrDone: { background: "none", border: "none", color: "#7A7A85", fontSize: 11, cursor: "pointer", marginTop: 8, fontFamily: "'Geist', sans-serif", textDecoration: "underline" },
-  hint: { fontSize: 12, color: "#7A7A85", padding: "8px 0 16px", lineHeight: 1.5, borderBottom: "1px solid #F0F0EC", marginBottom: 16 },
-  // Chat — dark navy (Coach AI style)
+  del: { background: "none", border: "none", color: "rgba(255,255,255,0.2)", fontSize: 14, cursor: "pointer", padding: 4 },
+  clrDone: { background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 11, cursor: "pointer", marginTop: 8, fontFamily: "'Geist', sans-serif", textDecoration: "underline" },
+  hint: { fontSize: 12, color: "rgba(255,255,255,0.4)", padding: "8px 0 16px", lineHeight: 1.5, borderBottom: "1px solid rgba(255,255,255,0.06)", marginBottom: 16 },
   chatWrap: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: "linear-gradient(165deg, #0A1233 0%, #050B25 100%)" },
   chatScroll: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", padding: "16px 16px 8px" },
-  chatBottom: { flexShrink: 0, background: "rgba(10,18,51,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.08)" },
+  chatBottom: { flexShrink: 0, background: "rgba(8,14,26,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.07)" },
   chatEmpty: { textAlign: "center", padding: "32px 8px" },
   sug: { padding: "10px 14px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 999, color: "rgba(255,255,255,0.75)", fontSize: 13, cursor: "pointer", fontFamily: "'Geist', sans-serif", textAlign: "left", fontWeight: 400 },
   uMsg: { display: "flex", justifyContent: "flex-end", marginBottom: 12 },
@@ -3021,24 +3008,19 @@ const S = {
   chatBar: { display: "flex", gap: 8, padding: "10px 16px 12px", flexShrink: 0 },
   chatIn: { flex: 1, padding: "10px 16px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 22, color: "rgba(255,255,255,0.9)", fontSize: 14, fontFamily: "'Geist', sans-serif", outline: "none", fontWeight: 400 },
   sendBtn: { width: 44, height: 44, background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: "50%", fontSize: 18, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
-  // Google
-  gcBanner: { display: "flex", alignItems: "center", gap: 12, background: "#DBEAFE", border: "1px solid rgba(59,130,246,0.2)", borderRadius: 14, padding: "12px 14px", marginBottom: 12 },
-  gcBtn: { padding: "7px 14px", background: "#3B82F6", color: "#fff", border: "none", borderRadius: 999, fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "'Geist', sans-serif", whiteSpace: "nowrap" },
-  // Attach menu & file chip
+  gcBanner: { display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "14px 16px", marginBottom: 12 },
+  gcBtn: { padding: "8px 18px", background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Geist', sans-serif", whiteSpace: "nowrap" },
   attachMenu: { background: "rgba(10,18,51,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.1)", borderTop: "1px solid rgba(255,255,255,0.08)", padding: "8px 8px 0", animation: "slideUp 0.2s ease" },
   attachOpt: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 14px", background: "none", border: "none", color: "#fff", cursor: "pointer", fontFamily: "'Geist', sans-serif", borderRadius: 12, textAlign: "left", transition: "background 0.15s" },
   fileChip: { display: "flex", alignItems: "center", gap: 10, background: "rgba(31,205,121,0.12)", border: "1px solid rgba(31,205,121,0.3)", borderRadius: 12, padding: "8px 12px", margin: "0 0 6px", animation: "slideUp 0.2s ease" },
-  // Drive picker overlay
   overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", zIndex: 300, display: "flex", alignItems: "flex-end" },
   pickerSheet: { background: "rgba(10,18,51,0.98)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: "20px 20px 0 0", padding: "24px 20px 40px", width: "100%", maxHeight: "70vh", overflowY: "auto", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 -8px 48px rgba(0,0,0,0.5)" },
   sheetRow: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 14px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, marginBottom: 8, cursor: "pointer", fontFamily: "'Geist', sans-serif", color: "#fff", transition: "background 0.15s" },
-  // Bottom nav — light frosted glass
-  bottomNav: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, display: "flex", background: "rgba(252,252,251,0.92)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid #E8E8E4", padding: "8px 0 env(safe-area-inset-bottom,8px)", zIndex: 100 },
-  navBtn: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "6px 0", background: "none", border: "none", color: "#7A7A85", cursor: "pointer", fontFamily: "'Geist', sans-serif", position: "relative", transition: "color .15s ease" },
-  navBtnOn: { color: "#14141A" },
-  navLbl: { fontSize: 9, fontWeight: 500, letterSpacing: "0.15em", textTransform: "uppercase", fontFamily: "'Geist Mono', monospace" },
+  bottomNav: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, display: "flex", background: "rgba(8,14,26,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.07)", padding: "8px 0 env(safe-area-inset-bottom,8px)", zIndex: 100 },
+  navBtn: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 0", background: "none", border: "none", cursor: "pointer", fontFamily: "'Geist', sans-serif", position: "relative", transition: "opacity .15s ease" },
+  navBtnOn: { opacity: 1 },
+  navLbl: { fontSize: 9, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "'Geist Mono', monospace", color: "inherit" },
   navDot: { position: "absolute", bottom: -2, width: 4, height: 4, borderRadius: "50%", background: "#1FCD79" },
   badge: { position: "absolute", top: -4, right: -8, minWidth: 16, height: 16, borderRadius: 8, background: "#1FCD79", color: "#062E1A", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", fontFamily: "'Geist Mono', monospace" },
-  // Floating button
-  fab: { position: "fixed", bottom: 76, right: "calc(50% - 228px)", width: 52, height: 52, borderRadius: "50%", background: "#1FCD79", border: "none", color: "#062E1A", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(31,205,121,0.35)", zIndex: 99 },
+  fab: { display: "none" },
 };
