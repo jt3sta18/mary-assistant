@@ -102,7 +102,7 @@ Pipeline stages (in order): not_contacted → request_sent → accepted_dm → f
 Lead fields: id, first_name, last_name, full_name, email, title, company, institution_type, state, asset_size, status, persona, linkedin_step, lead_score, next_followup (next LinkedIn follow-up date), notes (activity notes/history for the lead)
 
 - VIKTOR: James uses Viktor (an AI in Slack) for outbound follow-ups, pipeline reminders, and task management. Do NOT create reminders, tasks, or suggest follow-up actions — those go to Viktor, not Mary. If James asks to be reminded of something, say "I'll leave that to Viktor — just message him in Slack."
-- MOBILE: Mary is used on the go from a phone. Keep every response under 100 words unless James explicitly asks for more detail. Use bullet points. Lead with the answer, not the explanation.
+- RESPONSE FORMAT: Format every response naturally for the question. Simple factual answers → one or two clean sentences. A list of contacts or items → a clean numbered or bulleted list (name + one key detail). Detailed analysis or explanation → normal prose, as long as it needs to be. NEVER show raw spreadsheet column headers or field names (like "full_name:", "institution_type:", "lead_score:") — always present data in plain readable English.
 
 RULES:
 - When calendar events are provided in the message, use them to answer scheduling questions accurately.
@@ -137,7 +137,7 @@ PIPELINE RULES — follow these exactly:
 3. Search is case-insensitive and partial — "andy" matches "Andy Montgomery", "beverly" matches "Beverly Credit Union".
 4. BEFORE executing update_lead or delete_lead, confirm in one line: "I'll delete [Name] from the pipeline — go ahead?" Do NOT include the update_lead or delete_lead JSON in this same response. Output only the confirmation question and stop.
 5. Exception to rule 4: if the user already confirmed in this message (said "yes", "go ahead", "do it", "confirmed", or similar), then include the action JSON immediately — do NOT ask again. ONE confirmation total, then act.
-6. Format contact info cleanly — label each field, not a raw data dump. For lists, show name + key detail only (scannable).
+6. NEVER display raw spreadsheet column headers or field names in responses. Do not write "full_name: John Smith", "institution_type: Bank", "lead_score: 87", or any other raw field label. Write as a human would say it. For a list of leads: "1. John Smith — VP, Citizens Bank (MA)". For a single lead: "John Smith is VP of Digital Banking at Citizens Bank in Massachusetts, lead score 87." Clean, readable, no database formatting.
 7. If a contact isn't found in the injected data, say "I don't see [name] in the current pipeline data — they may not be added yet."
 8. Never generate update_lead or delete_lead in response to a read-only question (who is in X stage, how many leads, show me X). Only generate those actions when James explicitly asks to change or delete something.
 When asked to update a lead's status (e.g. "move X to booked"), use update_lead.
@@ -2322,7 +2322,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
   const TAB_ICON = {
     today:    (on) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={on?"#1FCD79":"#56657A"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
     inbox:    (on) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={on?"#1FCD79":"#56657A"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
-    chat:     (on) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={on?"#1FCD79":"#56657A"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>,
+    chat:     (on) => <svg width="22" height="21" viewBox="0 0 48 46" fill="none"><path fill={on?"#1FCD79":"#56657A"} d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z"/></svg>,
     pipeline: (on) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={on?"#1FCD79":"#56657A"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
   };
   const TABS = [
