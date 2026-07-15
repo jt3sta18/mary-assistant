@@ -76,7 +76,10 @@ function buildSystemPrompt() {
   const memorySection = memories.length
     ? `\n\n## Dynamic Memory (things ${name} has told you — treat as current facts)\n${memories.map((m, i) => `${i + 1}. ${m}`).join("\n")}`
     : "";
-  return SYSTEM_PROMPT_BASE + FINOVEO_KB + memorySection + `\n\nThe user's name is ${name}. Address them by name occasionally — naturally, not every message.\nToday's date and time is ${new Date().toISOString()}.\nThe current timezone offset is ${new Date().getTimezoneOffset()} minutes from UTC.`;
+  const now = new Date();
+  const localDate = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const localTime = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  return SYSTEM_PROMPT_BASE + FINOVEO_KB + memorySection + `\n\nThe user's name is ${name}. Address them by name occasionally — naturally, not every message.\nToday is ${localDate}. The current local time is ${localTime}.`;
 }
 
 const SYSTEM_PROMPT_BASE = `You are Mary, a sharp personal assistant built by Finoveo. You help James stay organized and are also a Finoveo expert — you know the product, the pitch, the sales narrative, and the business deeply. The Finoveo knowledge base is embedded below — use it whenever James asks about Finoveo, a pitch, a prospect, or competitive positioning.
