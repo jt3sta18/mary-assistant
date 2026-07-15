@@ -2401,9 +2401,18 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                 {events.map((ev, i) => {
                   const durMin = ev.start && ev.end ? Math.round((new Date(ev.end) - new Date(ev.start)) / 60000) : null;
                   const durLabel = durMin ? durMin >= 60 ? `${Math.floor(durMin/60)}h${durMin%60?` ${durMin%60}m`:""}` : `${durMin}m` : null;
+                  const evDate = new Date(ev.start);
+                  const today = new Date(); today.setHours(0,0,0,0);
+                  const tomorrow = new Date(today); tomorrow.setDate(today.getDate()+1);
+                  const evDay = new Date(evDate); evDay.setHours(0,0,0,0);
+                  const dayLabel = evDay.getTime()===today.getTime() ? "Today" : evDay.getTime()===tomorrow.getTime() ? "Tomorrow" : evDate.toLocaleDateString("en-US",{weekday:"long"});
                   return (
                     <div key={i} style={S.evItem}>
-                      <div style={S.evTime}>{formatTime(ev.start)}</div>
+                      <div style={S.evTime}>
+                        <div style={{fontSize:9,fontWeight:600,color:"rgba(255,255,255,0.35)",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:2}}>{dayLabel}</div>
+                        {!ev.allDay && formatTime(ev.start)}
+                        {ev.allDay && <span style={{fontSize:10}}>All day</span>}
+                      </div>
                       <div style={S.evInfo}>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
                           <div style={S.evTitle}>{ev.title}</div>
@@ -2963,7 +2972,7 @@ const S = {
   skelWrap: { display: "flex", flexDirection: "column", gap: 8 },
   skel: { height: 13, background: "rgba(255,255,255,0.06)", borderRadius: 6, animation: "pulse 1.5s ease-in-out infinite" },
   evItem: { display: "flex", gap: 12, alignItems: "flex-start", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" },
-  evTime: { fontSize: 11, fontWeight: 500, color: "#1FCD79", minWidth: 65, paddingTop: 2, fontFamily: "'DM Mono', monospace", letterSpacing: "0.04em" },
+  evTime: { fontSize: 11, fontWeight: 500, color: "#1FCD79", minWidth: 75, paddingTop: 2, fontFamily: "'DM Mono', monospace", letterSpacing: "0.04em", flexShrink: 0 },
   evInfo: { flex: 1 },
   evTitle: { fontSize: 14, fontWeight: 500, color: "#F0F2F5" },
   evLoc: { fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 2 },
