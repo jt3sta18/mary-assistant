@@ -771,13 +771,13 @@ function relativeDate(iso) {
   return formatDate(iso);
 }
 
-const PC = { high: "#ef4444", medium: "#f5c518", low: "#7a96bc" };
+const PC = { high: "#ef4444", medium: "#D9E84A", low: "#7A7A85" };
 
 // ═══════════════════════════════════════════════════════════════════════
 // PIPELINE TAB — constants, helpers, sub-components (outside Mary fn)
 // ═══════════════════════════════════════════════════════════════════════
 const PP = { navy:"#071428", deep:"#0c1a34", card:"#101f3a", border:"rgba(255,255,255,0.10)", bL:"rgba(255,255,255,0.06)", teal:"#00dba8", teal2:"#00f5c0", blue:"#1a6ee0", blue2:"#38aaff", gold:"#f5c518", white:"#fff", soft:"rgba(255,255,255,0.65)", muted:"#7a96bc", red:"#ff6b6b", purple:"#a78bfa" };
-const PPF = "'Plus Jakarta Sans',-apple-system,sans-serif";
+const PPF = "'Geist',-apple-system,sans-serif";
 const PPGRAD = "linear-gradient(90deg,#00f5c0,#38aaff)";
 
 // Status constants
@@ -2277,8 +2277,8 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
   const doneTasks = tasks.filter((t) => t.done);
   const pending = reminders.filter((r) => !r.fired);
 
-  // Gradient text helper
-  const gradText = { background: "linear-gradient(90deg, #00f5c0, #38aaff)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" };
+  // Gradient text helper — brand gradient (yellow → green → blue)
+  const gradText = { background: "linear-gradient(120deg, #D9E84A, #1FCD79 50%, #3B82F6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" };
 
   // ─── Pipeline computed values ────────────────────────────────────────
   const ppFiltered = useMemo(() => {
@@ -2328,7 +2328,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
 
   return (
     <div style={S.root}>
-      <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+      <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 
       {/* Background blobs */}
       <div style={S.blob1} />
@@ -2353,12 +2353,12 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
             <div style={S.dateLbl}>{dateStr}</div>
           </div>
           <div style={{display:"flex",alignItems:"center"}}>
-            {googleToken && <div style={{fontSize:10,color:"#7a96bc",cursor:"pointer"}} onClick={disconnectGoogle}>✓ Google connected</div>}
+            {googleToken && <div style={{fontSize:10,color:"#7A7A85",cursor:"pointer"}} onClick={disconnectGoogle}>✓ Google connected</div>}
           </div>
         </div>
         <div style={S.poweredBy}>
           <div style={S.liveDot} />
-          <span>powered by <span style={{ color: "#00f5c0", fontWeight: 600 }}>finoveo</span></span>
+          <span>powered by <span style={{ color: "#1FCD79", fontWeight: 600 }}>finoveo</span></span>
         </div>
       </header>}
 
@@ -2370,12 +2370,12 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
           <div style={S.anim}>
             {/* Google token expiring soon — reconnect banner */}
             {googleToken && googleTokenExpiring && (
-              <div style={{...S.gcBanner, background:"rgba(245,197,24,0.12)", border:"1px solid rgba(245,197,24,0.25)"}}>
+              <div style={{...S.gcBanner, background:"#FFFBE5", border:"1px solid #FDE68A"}}>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:600,color:"#f5c518",marginBottom:2}}>⚠️ Google session expiring</div>
-                  <div style={{fontSize:12,color:"#7a96bc"}}>Tap Reconnect to keep calendar, Gmail & pipeline access</div>
+                  <div style={{fontSize:13,fontWeight:600,color:"#92400E",marginBottom:2}}>⚠️ Google session expiring</div>
+                  <div style={{fontSize:12,color:"#78350F"}}>Tap Reconnect to keep calendar, Gmail & pipeline access</div>
                 </div>
-                <button onClick={connectGoogle} style={{...S.gcBtn, background:"rgba(245,197,24,0.15)", color:"#f5c518", border:"1px solid rgba(245,197,24,0.3)"}}>Reconnect</button>
+                <button onClick={connectGoogle} style={{...S.gcBtn, background:"#FCD34D", color:"#78350F", border:"none"}}>Reconnect</button>
               </div>
             )}
 
@@ -2384,7 +2384,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               <div style={S.gcBanner}>
                 <div style={{flex:1}}>
                   <div style={{fontSize:13,fontWeight:600,color:"#fff",marginBottom:2}}>📅 Connect Google Calendar</div>
-                  <div style={{fontSize:12,color:"#7a96bc"}}>See your real schedule in the daily briefing</div>
+                  <div style={{fontSize:12,color:"#7A7A85"}}>See your real schedule in the daily briefing</div>
                 </div>
                 <button onClick={connectGoogle} disabled={googleLoading} style={S.gcBtn}>{googleLoading ? "..." : "Connect"}</button>
               </div>
@@ -2422,16 +2422,16 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
             {/* Tomorrow Preview - shows after 5pm */}
             {(tomorrowPreview || (new Date().getHours() >= 17 && !tomorrowPreview && !tomorrowLoading)) && (
               <div style={S.tomorrowCard}>
-                <div style={S.cHead}><div style={{...S.headDot,background:"#38aaff",boxShadow:"0 0 8px #38aaff"}} /><span style={S.cTitle}>Tomorrow's Preview</span>
+                <div style={S.cHead}><div style={{...S.headDot,background:"#3B82F6"}} /><span style={S.cTitle}>Tomorrow's Preview</span>
                   {!tomorrowPreview && <button onClick={fetchTomorrow} style={S.refreshBtn}>Load →</button>}
                 </div>
-                {tomorrowLoading ? <div style={S.skelWrap}><div style={S.skel}/><div style={{...S.skel,width:"70%"}}/></div> : tomorrowPreview ? <div style={S.bText}>{tomorrowPreview}</div> : <div style={{fontSize:13,color:"#7a96bc",fontWeight:300}}>Tap "Load" to preview tomorrow's schedule</div>}
+                {tomorrowLoading ? <div style={S.skelWrap}><div style={S.skel}/><div style={{...S.skel,width:"70%"}}/></div> : tomorrowPreview ? <div style={S.bText}>{tomorrowPreview}</div> : <div style={{fontSize:13,color:"#7A7A85",fontWeight:300}}>Tap "Load" to preview tomorrow's schedule</div>}
               </div>
             )}
 
             {events.length > 0 && (
               <div style={S.card}>
-                <div style={S.cHead}><div style={{...S.headDot,background:"#38aaff",boxShadow:"0 0 8px #38aaff"}} /><span style={S.cTitle}>Upcoming Events</span></div>
+                <div style={S.cHead}><div style={{...S.headDot,background:"#3B82F6"}} /><span style={S.cTitle}>Upcoming Events</span></div>
                 {events.map((ev, i) => {
                   const durMin = ev.start && ev.end ? Math.round((new Date(ev.end) - new Date(ev.start)) / 60000) : null;
                   const durLabel = durMin ? durMin >= 60 ? `${Math.floor(durMin/60)}h${durMin%60?` ${durMin%60}m`:""}` : `${durMin}m` : null;
@@ -2453,7 +2453,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
 
             {openTasks.length > 0 && (
               <div style={S.card}>
-                <div style={S.cHead}><div style={{...S.headDot,background:"#f5c518",boxShadow:"0 0 8px #f5c518"}} /><span style={S.cTitle}>Open Tasks</span><button onClick={() => setTab("tasks")} style={S.seeAll}>See all →</button></div>
+                <div style={S.cHead}><div style={{...S.headDot,background:"#D9E84A"}} /><span style={S.cTitle}>Open Tasks</span><button onClick={() => setTab("tasks")} style={S.seeAll}>See all →</button></div>
                 {openTasks.slice(0, 3).map((t) => (
                   <div key={t.id} style={S.mini}><div style={{...S.pDot,background:PC[t.priority]}}/><span style={S.miniT}>{t.title}</span>{t.due && <span style={S.miniD}>{relativeDate(t.due)}</span>}</div>
                 ))}
@@ -2462,23 +2462,23 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
 
             {pending.length > 0 && (
               <div style={S.card}>
-                <div style={S.cHead}><div style={{...S.headDot,background:"#00f5c0",boxShadow:"0 0 8px #00f5c0"}} /><span style={S.cTitle}>Upcoming Reminders</span></div>
+                <div style={S.cHead}><div style={{...S.headDot,background:"#1FCD79"}} /><span style={S.cTitle}>Upcoming Reminders</span></div>
                 {pending.slice(0, 3).map((r) => (
-                  <div key={r.id} style={S.mini}><span style={{fontSize:10,color:"#00dba8"}}>⏰</span><span style={S.miniT}>{r.title}</span><span style={S.miniD}>{formatDateTime(r.time)}</span></div>
+                  <div key={r.id} style={S.mini}><span style={{fontSize:10,color:"#1FCD79"}}>⏰</span><span style={S.miniT}>{r.title}</span><span style={S.miniD}>{formatDateTime(r.time)}</span></div>
                 ))}
               </div>
             )}
 
             {suggestedTasks.length > 0 && (
               <div style={S.card}>
-                <div style={S.cHead}><div style={{...S.headDot,background:"#a78bfa",boxShadow:"0 0 8px #a78bfa"}} /><span style={S.cTitle}>Suggested Tasks</span><button onClick={async () => { await saveData("mary-suggested-tasks",[]); setSuggestedTasks([]); }} style={S.seeAll}>Clear</button></div>
+                <div style={S.cHead}><div style={{...S.headDot,background:"#3B82F6"}} /><span style={S.cTitle}>Suggested Tasks</span><button onClick={async () => { await saveData("mary-suggested-tasks",[]); setSuggestedTasks([]); }} style={S.seeAll}>Clear</button></div>
                 {suggestedTasks.map((t, i) => (
                   <div key={i} style={{...S.mini, justifyContent:"space-between"}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,flex:1}}>
                       <div style={{...S.pDot,background:PC[t.priority]||PC.medium}}/>
                       <div>
                         <div style={{fontSize:13,fontWeight:500}}>{t.title}</div>
-                        {t.reason && <div style={{fontSize:11,color:"#7a96bc"}}>{t.reason}</div>}
+                        {t.reason && <div style={{fontSize:11,color:"#7A7A85"}}>{t.reason}</div>}
                       </div>
                     </div>
                     <button onClick={() => { addTask(t.title, null, t.priority || "medium"); setSuggestedTasks(p => { const n = p.filter((_,idx)=>idx!==i); saveData("mary-suggested-tasks",n); return n; }); }} style={{...S.gcBtn, fontSize:10, padding:"4px 10px"}}>+ Add</button>
@@ -2501,14 +2501,14 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               <input value={quickTask} onChange={(e) => setQuickTask(e.target.value)} onKeyDown={(e) => e.key === "Enter" && quickTask.trim() && (addTask(quickTask.trim()), setQuickTask(""))} placeholder="Add a task..." style={S.addIn} />
               <button onClick={() => { if (quickTask.trim()) { addTask(quickTask.trim()); setQuickTask(""); }}} style={S.addBtn}>+</button>
             </div>
-            {!openTasks.length && !doneTasks.length && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>☐</div><div style={{fontSize:16,fontWeight:600}}>No tasks yet</div><div style={{fontSize:13,marginTop:4,color:"#7a96bc"}}>Add one above or ask Mary in chat</div></div>}
+            {!openTasks.length && !doneTasks.length && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>☐</div><div style={{fontSize:16,fontWeight:600}}>No tasks yet</div><div style={{fontSize:13,marginTop:4,color:"#7A7A85"}}>Add one above or ask Mary in chat</div></div>}
             {openTasks.length > 0 && (
               <div style={{marginBottom:20}}>
                 <div style={S.secTitle}>Open ({openTasks.length})</div>
                 {openTasks.map((t) => (
                   <div key={t.id} style={S.tItem}>
                     <button onClick={() => { setTasks((p) => p.map((x) => x.id === t.id ? {...x, done:true} : x)); }} style={{...S.chk, animation:"taskDone 0.3s ease"}}>☐</button>
-                    <div style={{flex:1}}><div style={{fontSize:14,fontWeight:500}}>{t.title}</div><div style={{fontSize:12,color:"#7a96bc",marginTop:2}}><span style={{color:PC[t.priority]}}>{t.priority}</span>{t.due && <span> · {relativeDate(t.due)}</span>}</div></div>
+                    <div style={{flex:1}}><div style={{fontSize:14,fontWeight:500}}>{t.title}</div><div style={{fontSize:12,color:"#7A7A85",marginTop:2}}><span style={{color:PC[t.priority]}}>{t.priority}</span>{t.due && <span> · {relativeDate(t.due)}</span>}</div></div>
                     <button onClick={() => setTasks((p) => p.filter((x) => x.id !== t.id))} style={S.del}>✕</button>
                   </div>
                 ))}
@@ -2537,20 +2537,20 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               <div style={S.secTitle}>Unread Work Emails</div>
               <button onClick={() => { const t = localStorage.getItem("mary-google-token"); if (t) fetchGmailEmails(t).then(filterDismissed).then(setInboxEmails).catch(()=>{}); }} style={S.refreshBtn}>↻ Refresh</button>
             </div>
-            {!googleToken && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>📧</div><div style={{fontSize:16,fontWeight:600}}>Google not connected</div><div style={{fontSize:13,marginTop:4,color:"#7a96bc"}}>Connect Google to see your inbox</div></div>}
-            {googleToken && !inboxEmails.length && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>📭</div><div style={{fontSize:16,fontWeight:600}}>Inbox clear</div><div style={{fontSize:13,marginTop:4,color:"#7a96bc"}}>No unread work emails</div></div>}
+            {!googleToken && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>📧</div><div style={{fontSize:16,fontWeight:600}}>Google not connected</div><div style={{fontSize:13,marginTop:4,color:"#7A7A85"}}>Connect Google to see your inbox</div></div>}
+            {googleToken && !inboxEmails.length && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>📭</div><div style={{fontSize:16,fontWeight:600}}>Inbox clear</div><div style={{fontSize:13,marginTop:4,color:"#7A7A85"}}>No unread work emails</div></div>}
             {inboxEmails.map((email, i) => (
               <div key={i} style={{...S.card, marginBottom:10}}>
-                <div style={{fontSize:12,color:"#00dba8",fontWeight:600,marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{email.from?.replace(/<.*>/, "").trim()}</div>
+                <div style={{fontSize:12,color:"#102691",fontWeight:600,marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{email.from?.replace(/<.*>/, "").trim()}</div>
                 <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>{email.subject}</div>
-                <div style={{fontSize:12,color:"#7a96bc",lineHeight:1.5,marginBottom:10}}>{email.snippet}</div>
+                <div style={{fontSize:12,color:"#7A7A85",lineHeight:1.5,marginBottom:10}}>{email.snippet}</div>
                 {replyingTo === i ? (
                   <div>
                     <textarea
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
                       placeholder="Write your reply..."
-                      style={{width:"100%",background:"#071428",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"#fff",fontSize:13,padding:"8px 10px",fontFamily:"'Plus Jakarta Sans',sans-serif",resize:"vertical",minHeight:80,outline:"none",boxSizing:"border-box"}}
+                      style={{width:"100%",background:"#F8F8F7",border:"1px solid #E8E8E4",borderRadius:8,color:"#14141A",fontSize:13,padding:"8px 10px",fontFamily:"'Geist',sans-serif",resize:"vertical",minHeight:80,outline:"none",boxSizing:"border-box"}}
                     />
                     <div style={{display:"flex",gap:8,marginTop:8}}>
                       <button disabled={replySending || !replyText.trim()} onClick={async () => {
@@ -2565,14 +2565,14 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                         } catch { alert("Failed to send reply"); }
                         setReplySending(false);
                       }} style={{...S.gcBtn, flex:1}}>{replySending ? "Sending..." : "Send Reply"}</button>
-                      <button onClick={() => { setReplyingTo(null); setReplyText(""); }} style={{...S.gcBtn, background:"rgba(255,255,255,0.04)", color:"#7a96bc", border:"1px solid rgba(255,255,255,0.08)"}}>Cancel</button>
+                      <button onClick={() => { setReplyingTo(null); setReplyText(""); }} style={{...S.gcBtn, background:"#F8F8F7", color:"#7A7A85", border:"1px solid #E8E8E4"}}>Cancel</button>
                     </div>
                   </div>
                 ) : (
                   <div style={{display:"flex",gap:8}}>
                     <button onClick={() => { setReplyingTo(i); setReplyText(""); }} style={{...S.gcBtn, fontSize:11, padding:"5px 12px"}}>↩ Reply</button>
-                    <button onClick={() => { setTab("chat"); setTimeout(() => { setInput(`Draft a reply to ${email.from?.replace(/<.*>/, "").trim()} about: "${email.subject}"`); inputRef.current?.focus(); }, 100); }} style={{...S.gcBtn, fontSize:11, padding:"5px 12px", background:"rgba(56,170,255,0.15)", color:"#38aaff"}}>✦ Ask Mary</button>
-                    <button onClick={() => { persistDismissedEmailId(email.id); setInboxEmails(p => p.filter((_, idx) => idx !== i)); }} style={{...S.gcBtn, fontSize:11, padding:"5px 12px", background:"rgba(255,255,255,0.04)", color:"#7a96bc", border:"1px solid rgba(255,255,255,0.08)", marginLeft:"auto"}}>✕ Dismiss</button>
+                    <button onClick={() => { setTab("chat"); setTimeout(() => { setInput(`Draft a reply to ${email.from?.replace(/<.*>/, "").trim()} about: "${email.subject}"`); inputRef.current?.focus(); }, 100); }} style={{...S.gcBtn, fontSize:11, padding:"5px 12px", background:"#DBEAFE", color:"#1D4ED8", border:"none"}}>✦ Ask Mary</button>
+                    <button onClick={() => { persistDismissedEmailId(email.id); setInboxEmails(p => p.filter((_, idx) => idx !== i)); }} style={{...S.gcBtn, fontSize:11, padding:"5px 12px", background:"#F8F8F7", color:"#7A7A85", border:"1px solid #E8E8E4", marginLeft:"auto"}}>✕ Dismiss</button>
                   </div>
                 )}
               </div>
@@ -2584,14 +2584,14 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         {tab === "reminders" && (
           <div style={S.anim}>
             <div style={S.hint}>Tell Mary in chat to set reminders, e.g. <em>"Remind me at 3pm to call Sarah"</em></div>
-            {!pending.length && !reminders.filter((r) => r.fired).length && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>🔔</div><div style={{fontSize:16,fontWeight:600}}>No reminders</div><div style={{fontSize:13,marginTop:4,color:"#7a96bc"}}>Ask Mary to set one in chat</div></div>}
+            {!pending.length && !reminders.filter((r) => r.fired).length && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>🔔</div><div style={{fontSize:16,fontWeight:600}}>No reminders</div><div style={{fontSize:13,marginTop:4,color:"#7A7A85"}}>Ask Mary to set one in chat</div></div>}
             {pending.length > 0 && (
               <div style={{marginBottom:20}}>
                 <div style={S.secTitle}>Pending ({pending.length})</div>
                 {pending.map((r) => (
                   <div key={r.id} style={S.tItem}>
                     <span style={{fontSize:16}}>⏰</span>
-                    <div style={{flex:1}}><div style={{fontSize:14,fontWeight:500}}>{r.title}</div><div style={{fontSize:12,color:"#7a96bc",marginTop:2}}>{formatDateTime(r.time)}</div></div>
+                    <div style={{flex:1}}><div style={{fontSize:14,fontWeight:500}}>{r.title}</div><div style={{fontSize:12,color:"#7A7A85",marginTop:2}}>{formatDateTime(r.time)}</div></div>
                     <button onClick={() => setReminders((p) => p.filter((x) => x.id !== r.id))} style={S.del}>✕</button>
                   </div>
                 ))}
@@ -2603,7 +2603,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                 {reminders.filter((r) => r.fired).map((r) => (
                   <div key={r.id} style={{...S.tItem,opacity:0.4}}>
                     <span>✓</span>
-                    <div style={{flex:1}}><div style={{fontSize:14}}>{r.title}</div><div style={{fontSize:12,color:"#7a96bc"}}>{formatDateTime(r.time)}</div></div>
+                    <div style={{flex:1}}><div style={{fontSize:14}}>{r.title}</div><div style={{fontSize:12,color:"#7A7A85"}}>{formatDateTime(r.time)}</div></div>
                     <button onClick={() => setReminders((p) => p.filter((x) => x.id !== r.id))} style={S.del}>✕</button>
                   </div>
                 ))}
@@ -2611,9 +2611,9 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               </div>
             )}
             {notifPerm !== "granted" && (
-              <div style={{...S.card,marginTop:16,borderColor:"rgba(0,219,168,0.25)"}}>
-                <div style={{fontSize:13,fontWeight:600,color:"#00dba8"}}>⚠️ Notifications not enabled</div>
-                <div style={{fontSize:12,color:"#7a96bc",marginBottom:10}}>Enable to receive push alerts for your reminders.</div>
+              <div style={{...S.card,marginTop:16,borderColor:"#FDE68A",background:"#FFFBE5"}}>
+                <div style={{fontSize:13,fontWeight:600,color:"#92400E"}}>⚠️ Notifications not enabled</div>
+                <div style={{fontSize:12,color:"#78350F",marginBottom:10}}>Enable to receive push alerts for your reminders.</div>
                 <button onClick={enableNotif} style={S.qBtn}>Enable Notifications</button>
               </div>
             )}
@@ -2628,7 +2628,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               {!chat.length && (
                 <div style={S.chatEmpty}>
                   <div style={{...gradText, fontSize: 28, fontWeight: 800, letterSpacing: "-1px", marginBottom: 4}}>Mary</div>
-                  <div style={{fontSize:13,lineHeight:1.5,marginBottom:16,color:"#7a96bc"}}>Ask about your schedule, send emails, set reminders, manage tasks — naturally.</div>
+                  <div style={{fontSize:13,lineHeight:1.5,marginBottom:16,color:"rgba(255,255,255,0.45)"}}>Ask about your schedule, send emails, set reminders, manage tasks — naturally.</div>
                   <div style={{display:"flex",flexDirection:"column",gap:6}}>
                     {["What's on my calendar today?","Remind me at 3pm to call the client","Send an email to my team about Friday's meeting","Check my inbox for anything from Finoveo","Do I have any conflicts this week?"].map((s) => (
                       <button key={s} onClick={() => { setInput(s); setTimeout(() => inputRef.current?.focus(), 100); }} style={S.sug}>{s}</button>
@@ -2638,14 +2638,14 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               )}
               {chat.map((m, i) => (
                 <div key={i} style={m.role === "user" ? S.uMsg : S.aMsg}>
-                  {m.role === "assistant" && <div style={S.av}><div style={{width:7,height:7,borderRadius:"50%",background:"#00f5c0",boxShadow:"0 0 8px #00f5c0"}} /></div>}
+                  {m.role === "assistant" && <div style={S.av}><div style={{width:7,height:7,borderRadius:"50%",background:"#1FCD79",boxShadow:"0 0 8px rgba(31,205,121,0.5)"}} /></div>}
                   {m.role === "user"
                     ? <div style={S.uBub}>{m.text}</div>
                     : <MarkdownText text={m.text} style={S.aBub} />}
                 </div>
               ))}
               {loading && (
-                <div style={S.aMsg}><div style={S.av}><div style={{width:7,height:7,borderRadius:"50%",background:"#00f5c0",boxShadow:"0 0 8px #00f5c0"}} /></div><div style={S.aBub}>
+                <div style={S.aMsg}><div style={S.av}><div style={{width:7,height:7,borderRadius:"50%",background:"#1FCD79",boxShadow:"0 0 8px rgba(31,205,121,0.5)"}} /></div><div style={S.aBub}>
                   <span style={{display:"inline-flex",gap:4}}>
                     <span style={S.dot}>●</span><span style={{...S.dot,animationDelay:"0.2s"}}>●</span><span style={{...S.dot,animationDelay:"0.4s"}}>●</span>
                   </span>
@@ -2661,11 +2661,11 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                 <div style={S.attachMenu} onMouseLeave={() => {}}>
                   <button onClick={() => { fileInputRef.current?.click(); setShowAttachMenu(false); }} style={S.attachOpt}>
                     <span style={{fontSize:18}}>📎</span>
-                    <div><div style={{fontWeight:600,fontSize:13}}>Upload File</div><div style={{fontSize:11,color:"#7a96bc"}}>CSV, Excel, PDF, or Image</div></div>
+                    <div><div style={{fontWeight:600,fontSize:13}}>Upload File</div><div style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>CSV, Excel, PDF, or Image</div></div>
                   </button>
                   <button onClick={openDrivePicker} style={S.attachOpt}>
                     <span style={{fontSize:18}}>📊</span>
-                    <div><div style={{fontWeight:600,fontSize:13}}>Google Drive Sheet</div><div style={{fontSize:11,color:"#7a96bc"}}>Pick an existing spreadsheet</div></div>
+                    <div><div style={{fontWeight:600,fontSize:13}}>Google Drive Sheet</div><div style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>Pick an existing spreadsheet</div></div>
                   </button>
                 </div>
               )}
@@ -2677,18 +2677,18 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                   }
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{attachedFile.name}</div>
-                    <div style={{fontSize:11,color:"#7a96bc"}}>{attachedFile.type === "pdf" ? "PDF — ready to read" : attachedFile.type === "image" ? "Image — Mary can see this" : `${attachedFile.rows} rows`}</div>
+                    <div style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>{attachedFile.type === "pdf" ? "PDF — ready to read" : attachedFile.type === "image" ? "Image — Mary can see this" : `${attachedFile.rows} rows`}</div>
                   </div>
                   <button onClick={() => setAttachedFile(null)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.3)",cursor:"pointer",fontSize:14,padding:4}}>✕</button>
                 </div>
               )}
               {chat.length > 0 && (
                 <div style={{display:"flex",justifyContent:"center",padding:"2px 16px 0"}}>
-                  <button onClick={() => { setChat([]); saveData("mary-chat", []); }} style={{fontSize:11,color:"rgba(255,255,255,0.18)",background:"none",border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",letterSpacing:"0.3px"}}>✕ New chat</button>
+                  <button onClick={() => { setChat([]); saveData("mary-chat", []); }} style={{fontSize:11,color:"rgba(255,255,255,0.25)",background:"none",border:"none",cursor:"pointer",fontFamily:"'Geist',sans-serif",letterSpacing:"0.3px"}}>✕ New chat</button>
                 </div>
               )}
               <div style={S.chatBar}>
-                <button onClick={() => setShowAttachMenu((p) => !p)} style={{...S.sendBtn, background: showAttachMenu ? "rgba(52,168,83,0.2)" : "rgba(255,255,255,0.06)", color: showAttachMenu ? "#34a853" : "#7a96bc", boxShadow:"none", fontSize:16}} title="Attach file">📎</button>
+                <button onClick={() => setShowAttachMenu((p) => !p)} style={{...S.sendBtn, background: showAttachMenu ? "rgba(31,205,121,0.15)" : "rgba(255,255,255,0.06)", color: showAttachMenu ? "#1FCD79" : "rgba(255,255,255,0.4)", boxShadow:"none", fontSize:16}} title="Attach file">📎</button>
                 <button onClick={startListening} style={{...S.sendBtn, background: isListening ? "rgba(239,68,68,0.15)" : "rgba(255,255,255,0.06)", boxShadow:"none", padding:"0 10px", display:"flex", alignItems:"center", justifyContent:"center"}} title="Voice input">
                   <svg width="22" height="16" viewBox="0 0 22 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <style>{`
@@ -2704,12 +2704,12 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                       .w4 { animation: ${isListening ? "wave4 0.8s ease-in-out infinite 0.15s" : "none"}; }
                       .w5 { animation: ${isListening ? "wave5 0.8s ease-in-out infinite 0.05s" : "none"}; }
                     `}</style>
-                    <rect className="wb w1" x="0"  y="6" width="3" height="4"  fill={isListening ? "#ef4444" : "#7a96bc"} rx="1.5"/>
-                    <rect className="wb w2" x="4"  y="4" width="3" height="8"  fill={isListening ? "#ef4444" : "#7a96bc"} rx="1.5"/>
-                    <rect className="wb w3" x="8"  y="2" width="3" height="12" fill={isListening ? "#ef4444" : "#00dba8"} rx="1.5"/>
-                    <rect className="wb w4" x="12" y="4" width="3" height="8"  fill={isListening ? "#ef4444" : "#7a96bc"} rx="1.5"/>
-                    <rect className="wb w5" x="16" y="6" width="3" height="4"  fill={isListening ? "#ef4444" : "#7a96bc"} rx="1.5"/>
-                    <rect className="wb w6" x="19" y="5" width="3" height="6"  fill={isListening ? "#ef4444" : "#7a96bc"} rx="1.5"/>
+                    <rect className="wb w1" x="0"  y="6" width="3" height="4"  fill={isListening ? "#ef4444" : "rgba(255,255,255,0.35)"} rx="1.5"/>
+                    <rect className="wb w2" x="4"  y="4" width="3" height="8"  fill={isListening ? "#ef4444" : "rgba(255,255,255,0.35)"} rx="1.5"/>
+                    <rect className="wb w3" x="8"  y="2" width="3" height="12" fill={isListening ? "#ef4444" : "#1FCD79"} rx="1.5"/>
+                    <rect className="wb w4" x="12" y="4" width="3" height="8"  fill={isListening ? "#ef4444" : "rgba(255,255,255,0.35)"} rx="1.5"/>
+                    <rect className="wb w5" x="16" y="6" width="3" height="4"  fill={isListening ? "#ef4444" : "rgba(255,255,255,0.35)"} rx="1.5"/>
+                    <rect className="wb w6" x="19" y="5" width="3" height="6"  fill={isListening ? "#ef4444" : "rgba(255,255,255,0.35)"} rx="1.5"/>
                   </svg>
                 </button>
                 <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") sendMessage(); setShowAttachMenu(false); }} placeholder={isListening ? "Listening..." : attachedFile ? `Tell Mary what to do with ${attachedFile.name}...` : "Ask Mary anything..."} style={{...S.chatIn, borderColor: isListening ? "rgba(239,68,68,0.4)" : attachedFile ? "rgba(52,168,83,0.4)" : "rgba(255,255,255,0.10)"}} />
@@ -2836,9 +2836,9 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
               <div>
                 <div style={{fontSize:16,fontWeight:700}}>📊 Google Drive Sheets</div>
-                <div style={{fontSize:12,color:"#7a96bc",marginTop:2}}>Tap a sheet to load it into chat</div>
+                <div style={{fontSize:12,color:"rgba(255,255,255,0.4)",marginTop:2}}>Tap a sheet to load it into chat</div>
               </div>
-              <button onClick={() => setShowDrivePicker(false)} style={{background:"none",border:"none",color:"#7a96bc",cursor:"pointer",fontSize:20,padding:4}}>✕</button>
+              <button onClick={() => setShowDrivePicker(false)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:20,padding:4}}>✕</button>
             </div>
             {driveLoading && (
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -2846,13 +2846,13 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               </div>
             )}
             {!driveLoading && driveError && (
-              <div style={{textAlign:"center",padding:"24px 16px",color:"#7a96bc"}}>
+              <div style={{textAlign:"center",padding:"24px 16px",color:"rgba(255,255,255,0.4)"}}>
                 {driveError === "no_token" ? (
                   <>
                     <div style={{fontSize:32,marginBottom:8}}>🔗</div>
                     <div style={{fontWeight:600,color:"#fff",marginBottom:6}}>Google not connected</div>
                     <div style={{fontSize:12,marginBottom:16}}>Connect Google to access your Drive sheets</div>
-                    <button onClick={() => { setShowDrivePicker(false); connectGoogle(); }} style={{background:"linear-gradient(90deg,#00f5c0,#38aaff)",border:"none",color:"#071428",fontWeight:700,fontSize:13,padding:"8px 20px",borderRadius:8,cursor:"pointer"}}>Connect Google</button>
+                    <button onClick={() => { setShowDrivePicker(false); connectGoogle(); }} style={{background:"linear-gradient(120deg,#D9E84A,#1FCD79)",border:"none",color:"#062E1A",fontWeight:700,fontSize:13,padding:"8px 20px",borderRadius:8,cursor:"pointer"}}>Connect Google</button>
                   </>
                 ) : driveError.startsWith("drive_403") ? (
                   <>
@@ -2860,14 +2860,14 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                     <div style={{fontWeight:600,color:"#fff",marginBottom:6}}>Drive access blocked</div>
                     <div style={{fontSize:12,marginBottom:8}}>Your token doesn't have Drive permission. Reconnect Google to fix this.</div>
                     <div style={{fontSize:11,color:"#4a6080",marginBottom:16,fontFamily:"monospace"}}>{driveError}</div>
-                    <button onClick={() => { setShowDrivePicker(false); setDriveSheets([]); setDriveError(null); connectGoogle(); }} style={{background:"linear-gradient(90deg,#00f5c0,#38aaff)",border:"none",color:"#071428",fontWeight:700,fontSize:13,padding:"8px 20px",borderRadius:8,cursor:"pointer"}}>Reconnect Google</button>
+                    <button onClick={() => { setShowDrivePicker(false); setDriveSheets([]); setDriveError(null); connectGoogle(); }} style={{background:"linear-gradient(120deg,#D9E84A,#1FCD79)",border:"none",color:"#062E1A",fontWeight:700,fontSize:13,padding:"8px 20px",borderRadius:8,cursor:"pointer"}}>Reconnect Google</button>
                   </>
                 ) : driveError === "token_expired" ? (
                   <>
                     <div style={{fontSize:32,marginBottom:8}}>⏱</div>
                     <div style={{fontWeight:600,color:"#fff",marginBottom:6}}>Session expired</div>
                     <div style={{fontSize:12,marginBottom:16}}>Your Google session expired. Reconnect to refresh it.</div>
-                    <button onClick={() => { setShowDrivePicker(false); setDriveSheets([]); setDriveError(null); connectGoogle(); }} style={{background:"linear-gradient(90deg,#00f5c0,#38aaff)",border:"none",color:"#071428",fontWeight:700,fontSize:13,padding:"8px 20px",borderRadius:8,cursor:"pointer"}}>Reconnect Google</button>
+                    <button onClick={() => { setShowDrivePicker(false); setDriveSheets([]); setDriveError(null); connectGoogle(); }} style={{background:"linear-gradient(120deg,#D9E84A,#1FCD79)",border:"none",color:"#062E1A",fontWeight:700,fontSize:13,padding:"8px 20px",borderRadius:8,cursor:"pointer"}}>Reconnect Google</button>
                   </>
                 ) : driveError === "empty" ? (
                   <>
@@ -2890,11 +2890,11 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                 <span style={{fontSize:20}}>📗</span>
                 <div style={{flex:1,minWidth:0,textAlign:"left"}}>
                   <div style={{fontSize:14,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sheet.name}</div>
-                  <div style={{fontSize:11,color:"#7a96bc",marginTop:2}}>
+                  <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:2}}>
                     Modified {new Date(sheet.modifiedTime).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
                   </div>
                 </div>
-                <span style={{fontSize:12,color:"#00f5c0",fontWeight:600}}>Load →</span>
+                <span style={{fontSize:12,color:"#1FCD79",fontWeight:600}}>Load →</span>
               </button>
             ))}
           </div>
@@ -2927,9 +2927,9 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
         @keyframes dotPulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
-        @keyframes livePulse { 0%, 100% { opacity: 1; box-shadow: 0 0 6px #00f5c0; } 50% { opacity: 0.5; box-shadow: 0 0 2px #00f5c0; } }
+        @keyframes livePulse { 0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(31,205,121,0.6); } 50% { opacity: 0.5; box-shadow: 0 0 2px rgba(31,205,121,0.2); } }
         @keyframes blobMove { 0%,100% { transform: translate(0,0) scale(1); } 33% { transform: translate(30px,-20px) scale(1.05); } 66% { transform: translate(-20px,15px) scale(0.97); } }
-        @keyframes fabPulse { 0%,100% { box-shadow: 0 4px 24px rgba(0,219,168,0.4); } 50% { box-shadow: 0 4px 36px rgba(0,219,168,0.7); } }
+        @keyframes fabPulse { 0%,100% { box-shadow: 0 4px 24px rgba(31,205,121,0.4); } 50% { box-shadow: 0 4px 36px rgba(31,205,121,0.65); } }
         @keyframes taskDone { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
@@ -2939,106 +2939,106 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
 }
 
 const S = {
-  // Root & background
-  root: { fontFamily: "'Plus Jakarta Sans', -apple-system, sans-serif", background: "#060e1e", color: "#ffffff", height: "100dvh", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" },
-  blob1: { position: "fixed", top: -120, left: -80, width: 320, height: 320, borderRadius: "50%", background: "radial-gradient(circle, rgba(0,219,168,0.12) 0%, transparent 70%)", animation: "blobMove 12s ease-in-out infinite", pointerEvents: "none", zIndex: 0 },
-  blob2: { position: "fixed", top: 200, right: -100, width: 280, height: 280, borderRadius: "50%", background: "radial-gradient(circle, rgba(56,170,255,0.10) 0%, transparent 70%)", animation: "blobMove 15s ease-in-out infinite reverse", pointerEvents: "none", zIndex: 0 },
-  blob3: { position: "fixed", bottom: 100, left: 60, width: 200, height: 200, borderRadius: "50%", background: "radial-gradient(circle, rgba(167,139,250,0.08) 0%, transparent 70%)", animation: "blobMove 18s ease-in-out infinite", pointerEvents: "none", zIndex: 0 },
+  // Root & background — light paper
+  root: { fontFamily: "'Geist', -apple-system, sans-serif", background: "#FCFCFB", color: "#14141A", height: "100dvh", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" },
+  blob1: { display: "none" },
+  blob2: { display: "none" },
+  blob3: { display: "none" },
   // Notif banner
-  notifBanner: { background: "rgba(0,219,168,0.06)", borderBottom: "1px solid rgba(0,219,168,0.12)", padding: "10px 16px", position: "relative", zIndex: 10 },
+  notifBanner: { background: "#E6F7EF", borderBottom: "1px solid rgba(31,205,121,0.2)", padding: "10px 16px", position: "relative", zIndex: 10 },
   notifRow: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 },
-  notifTitle: { fontSize: 12, fontWeight: 600, color: "#00f5c0" },
-  notifDesc: { fontSize: 11, color: "#7a96bc" },
-  notifBtn: { padding: "5px 14px", background: "#00dba8", color: "#071428", border: "none", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap" },
-  // Header
-  header: { padding: "20px 20px 12px", background: "rgba(6,14,30,0.8)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.05)", position: "relative", zIndex: 10 },
+  notifTitle: { fontSize: 12, fontWeight: 600, color: "#056B3A" },
+  notifDesc: { fontSize: 11, color: "#7A7A85" },
+  notifBtn: { padding: "6px 16px", background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: 999, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Geist', sans-serif", whiteSpace: "nowrap" },
+  // Header — light frosted glass
+  header: { padding: "20px 20px 14px", background: "rgba(252,252,251,0.92)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderBottom: "1px solid #E8E8E4", position: "relative", zIndex: 10 },
   headerRow: { display: "flex", justifyContent: "space-between", alignItems: "center" },
-  logo: { fontSize: 28, fontWeight: 800, letterSpacing: "-1.5px", lineHeight: 1 },
-  dateLbl: { fontSize: 11, color: "#7a96bc", marginTop: 3, fontWeight: 400 },
-  greet: { fontSize: 12, color: "rgba(255,255,255,0.6)", fontWeight: 400, textAlign: "right" },
-  poweredBy: { display: "flex", alignItems: "center", gap: 6, marginTop: 10, fontSize: 10, color: "#7a96bc", fontWeight: 400 },
-  liveDot: { width: 6, height: 6, borderRadius: "50%", background: "#00f5c0", boxShadow: "0 0 8px #00f5c0", animation: "livePulse 2s ease-in-out infinite" },
+  logo: { fontSize: 22, fontWeight: 600, letterSpacing: "-0.5px", lineHeight: 1, color: "#14141A" },
+  dateLbl: { fontSize: 10, color: "#7A7A85", marginTop: 4, fontWeight: 500, fontFamily: "'Geist Mono', monospace", textTransform: "uppercase", letterSpacing: "0.15em" },
+  greet: { fontSize: 12, color: "#7A7A85", fontWeight: 400, textAlign: "right" },
+  poweredBy: { display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: 10, color: "#7A7A85", fontWeight: 500, fontFamily: "'Geist Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase" },
+  liveDot: { width: 6, height: 6, borderRadius: "50%", background: "#1FCD79", animation: "livePulse 2s ease-in-out infinite" },
   // Main
   main: { flex: 1, padding: "16px 16px 100px", overflowY: "auto", position: "relative", zIndex: 1 },
   anim: { animation: "slideUp 0.3s cubic-bezier(0.16,1,0.3,1)" },
-  // Cards — glassmorphism
-  card: { background: "rgba(16,31,58,0.7)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: 16, padding: 16, marginBottom: 12, border: "1px solid rgba(255,255,255,0.07)", boxShadow: "0 4px 24px rgba(0,0,0,0.2)" },
+  // Cards — clean white with border
+  card: { background: "#FFFFFF", borderRadius: 16, padding: 16, marginBottom: 12, border: "1px solid #E8E8E4", boxShadow: "0 1px 4px rgba(20,20,26,0.04)" },
   cHead: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 },
-  headDot: { width: 7, height: 7, borderRadius: "50%", background: "#00dba8", boxShadow: "0 0 8px #00dba8", flexShrink: 0 },
-  cTitle: { fontSize: 10, fontWeight: 700, flex: 1, textTransform: "uppercase", letterSpacing: "2px", color: "rgba(255,255,255,0.5)" },
-  seeAll: { background: "none", border: "none", color: "#00f5c0", fontSize: 11, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600 },
-  refreshBtn: { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "#7a96bc", fontSize: 10, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, padding: "4px 10px" },
-  tomorrowCard: { background: "rgba(26,57,120,0.3)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: 16, padding: 16, marginBottom: 12, border: "1px solid rgba(56,170,255,0.12)", boxShadow: "0 4px 24px rgba(0,0,0,0.2)" },
-  bText: { fontSize: 14, lineHeight: 1.85, color: "rgba(255,255,255,0.75)", fontWeight: 300, letterSpacing: "0.1px" },
-  // Bible verse — more ornate
-  verseCard: { background: "linear-gradient(135deg, rgba(0,219,168,0.08), rgba(56,170,255,0.05))", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: 20, padding: "24px 20px", marginBottom: 12, border: "1px solid rgba(0,245,192,0.15)", position: "relative", overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.2)" },
-  verseMark: { position: "absolute", top: -10, left: 12, fontSize: 80, opacity: 0.05, color: "#00f5c0", lineHeight: 1, fontFamily: "Georgia, serif", pointerEvents: "none" },
-  verseText: { fontSize: 16, lineHeight: 1.75, color: "rgba(255,255,255,0.9)", fontWeight: 300, fontStyle: "italic", marginBottom: 14, fontFamily: "Georgia, serif", position: "relative" },
+  headDot: { width: 6, height: 6, borderRadius: "50%", background: "#1FCD79", flexShrink: 0 },
+  cTitle: { fontSize: 10, fontWeight: 500, flex: 1, textTransform: "uppercase", letterSpacing: "0.18em", color: "#7A7A85", fontFamily: "'Geist Mono', monospace" },
+  seeAll: { background: "none", border: "none", color: "#14141A", fontSize: 13, cursor: "pointer", fontFamily: "'Geist', sans-serif", fontWeight: 500 },
+  refreshBtn: { background: "#F5F5F2", border: "1px solid #E8E8E4", borderRadius: 8, color: "#7A7A85", fontSize: 10, cursor: "pointer", fontFamily: "'Geist', sans-serif", fontWeight: 500, padding: "4px 10px" },
+  tomorrowCard: { background: "#FFFFFF", borderRadius: 16, padding: 16, marginBottom: 12, border: "1px solid #E8E8E4", boxShadow: "0 1px 4px rgba(20,20,26,0.04)" },
+  bText: { fontSize: 14, lineHeight: 1.75, color: "#3A3A45", fontWeight: 400 },
+  // Bible verse — dark navy card (intentional brand contrast)
+  verseCard: { background: "linear-gradient(165deg, #0A1233 0%, #050B25 100%)", borderRadius: 20, padding: "24px 20px", marginBottom: 12, border: "none", position: "relative", overflow: "hidden", boxShadow: "0 4px 24px rgba(10,18,51,0.18)" },
+  verseMark: { position: "absolute", top: -10, left: 12, fontSize: 80, opacity: 0.05, color: "#1FCD79", lineHeight: 1, fontFamily: "Georgia, serif", pointerEvents: "none" },
+  verseText: { fontSize: 15, lineHeight: 1.8, color: "rgba(255,255,255,0.9)", fontWeight: 300, fontStyle: "italic", marginBottom: 14, fontFamily: "Georgia, serif", position: "relative" },
   verseFooter: { display: "flex", justifyContent: "space-between", alignItems: "center" },
-  verseRef: { fontSize: 12, fontWeight: 700, color: "#00dba8", letterSpacing: "0.5px" },
-  shareBtn: { padding: "5px 14px", background: "rgba(0,219,168,0.1)", border: "1px solid rgba(0,219,168,0.25)", borderRadius: 8, color: "#00f5c0", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" },
+  verseRef: { fontSize: 11, fontWeight: 600, color: "#1FCD79", letterSpacing: "0.08em", fontFamily: "'Geist Mono', monospace" },
+  shareBtn: { padding: "5px 14px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 999, color: "rgba(255,255,255,0.8)", fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "'Geist', sans-serif" },
   skelWrap: { display: "flex", flexDirection: "column", gap: 8 },
-  skel: { height: 13, background: "rgba(255,255,255,0.05)", borderRadius: 6, animation: "pulse 1.5s ease-in-out infinite" },
+  skel: { height: 13, background: "#F0F0EC", borderRadius: 6, animation: "pulse 1.5s ease-in-out infinite" },
   // Events
-  evItem: { display: "flex", gap: 12, alignItems: "flex-start", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" },
-  evTime: { fontSize: 12, fontWeight: 600, color: "#00f5c0", minWidth: 65, paddingTop: 2, fontFamily: "'DM Mono', monospace" },
+  evItem: { display: "flex", gap: 12, alignItems: "flex-start", padding: "10px 0", borderBottom: "1px solid #F0F0EC" },
+  evTime: { fontSize: 11, fontWeight: 500, color: "#102691", minWidth: 65, paddingTop: 2, fontFamily: "'Geist Mono', monospace", letterSpacing: "0.04em" },
   evInfo: { flex: 1 },
-  evTitle: { fontSize: 14, fontWeight: 500 },
-  evLoc: { fontSize: 12, color: "#7a96bc", marginTop: 2 },
-  durPill: { fontSize: 10, fontWeight: 600, color: "#38aaff", background: "rgba(56,170,255,0.12)", border: "1px solid rgba(56,170,255,0.2)", borderRadius: 20, padding: "1px 7px", flexShrink: 0 },
+  evTitle: { fontSize: 14, fontWeight: 500, color: "#14141A" },
+  evLoc: { fontSize: 12, color: "#7A7A85", marginTop: 2 },
+  durPill: { fontSize: 9, fontWeight: 600, color: "#3B82F6", background: "#DBEAFE", borderRadius: 999, padding: "2px 8px", flexShrink: 0, fontFamily: "'Geist Mono', monospace" },
   // Mini tasks
   mini: { display: "flex", alignItems: "center", gap: 8, padding: "7px 0" },
   pDot: { width: 6, height: 6, borderRadius: "50%", flexShrink: 0 },
-  miniT: { fontSize: 13, flex: 1, fontWeight: 400 },
-  miniD: { fontSize: 11, color: "#7a96bc", fontFamily: "'DM Mono', monospace" },
+  miniT: { fontSize: 13, flex: 1, fontWeight: 400, color: "#14141A" },
+  miniD: { fontSize: 11, color: "#7A7A85", fontFamily: "'Geist Mono', monospace" },
   // Quick actions
   qActions: { display: "flex", gap: 8, marginTop: 8 },
-  qBtn: { flex: 1, padding: "13px 16px", background: "linear-gradient(135deg, #00dba8, #0099a8)", color: "#071428", border: "none", borderRadius: 14, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: "0 4px 20px rgba(0,219,168,0.35)" },
-  qBtn2: { flex: 1, padding: "13px 16px", background: "rgba(255,255,255,0.04)", color: "#fff", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 14, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" },
+  qBtn: { flex: 1, padding: "14px 16px", background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: 14, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "'Geist', sans-serif" },
+  qBtn2: { flex: 1, padding: "14px 16px", background: "#FFFFFF", color: "#14141A", border: "1px solid #E8E8E4", borderRadius: 14, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "'Geist', sans-serif" },
   // Tasks
   addRow: { display: "flex", gap: 8, marginBottom: 16 },
-  addIn: { flex: 1, padding: "11px 14px", background: "rgba(16,31,58,0.7)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 12, color: "#fff", fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif", outline: "none", fontWeight: 300 },
-  addBtn: { width: 42, height: 42, background: "linear-gradient(135deg,#00dba8,#0099a8)", color: "#071428", border: "none", borderRadius: 12, fontSize: 22, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(0,219,168,0.35)" },
-  empty: { textAlign: "center", padding: "48px 20px", color: "rgba(255,255,255,0.4)" },
-  secTitle: { fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "2px", color: "#00dba8", marginBottom: 10 },
-  tItem: { display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" },
-  chk: { background: "none", border: "none", color: "#00dba8", fontSize: 20, cursor: "pointer", padding: 0, lineHeight: 1 },
-  del: { background: "none", border: "none", color: "rgba(255,255,255,0.15)", fontSize: 14, cursor: "pointer", padding: 4 },
-  clrDone: { background: "none", border: "none", color: "#7a96bc", fontSize: 11, cursor: "pointer", marginTop: 8, fontFamily: "'Plus Jakarta Sans', sans-serif", textDecoration: "underline" },
-  hint: { fontSize: 12, color: "#7a96bc", padding: "8px 0 16px", lineHeight: 1.5, borderBottom: "1px solid rgba(255,255,255,0.05)", marginBottom: 16 },
-  // Chat
-  chatWrap: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 },
-  chatScroll: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", padding: "12px 16px 8px" },
-  chatBottom: { flexShrink: 0, background: "rgba(6,14,30,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.05)" },
-  chatEmpty: { textAlign: "center", padding: "24px 8px" },
-  sug: { padding: "10px 14px", background: "rgba(16,31,58,0.7)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, color: "rgba(255,255,255,0.6)", fontSize: 13, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: "left", fontWeight: 400 },
+  addIn: { flex: 1, padding: "12px 14px", background: "#FFFFFF", border: "1px solid #E8E8E4", borderRadius: 12, color: "#14141A", fontSize: 14, fontFamily: "'Geist', sans-serif", outline: "none", fontWeight: 400 },
+  addBtn: { width: 44, height: 44, background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: 12, fontSize: 22, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
+  empty: { textAlign: "center", padding: "48px 20px", color: "#7A7A85" },
+  secTitle: { fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.18em", color: "#7A7A85", marginBottom: 10, fontFamily: "'Geist Mono', monospace" },
+  tItem: { display: "flex", alignItems: "center", gap: 10, padding: "12px 0", borderBottom: "1px solid #F0F0EC" },
+  chk: { background: "none", border: "none", color: "#1FCD79", fontSize: 20, cursor: "pointer", padding: 0, lineHeight: 1 },
+  del: { background: "none", border: "none", color: "#B5B5BD", fontSize: 14, cursor: "pointer", padding: 4 },
+  clrDone: { background: "none", border: "none", color: "#7A7A85", fontSize: 11, cursor: "pointer", marginTop: 8, fontFamily: "'Geist', sans-serif", textDecoration: "underline" },
+  hint: { fontSize: 12, color: "#7A7A85", padding: "8px 0 16px", lineHeight: 1.5, borderBottom: "1px solid #F0F0EC", marginBottom: 16 },
+  // Chat — dark navy (Coach AI style)
+  chatWrap: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: "linear-gradient(165deg, #0A1233 0%, #050B25 100%)" },
+  chatScroll: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", padding: "16px 16px 8px" },
+  chatBottom: { flexShrink: 0, background: "rgba(10,18,51,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.08)" },
+  chatEmpty: { textAlign: "center", padding: "32px 8px" },
+  sug: { padding: "10px 14px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 999, color: "rgba(255,255,255,0.75)", fontSize: 13, cursor: "pointer", fontFamily: "'Geist', sans-serif", textAlign: "left", fontWeight: 400 },
   uMsg: { display: "flex", justifyContent: "flex-end", marginBottom: 12 },
   aMsg: { display: "flex", justifyContent: "flex-start", gap: 8, marginBottom: 12, alignItems: "flex-start" },
   av: { marginTop: 8, flexShrink: 0 },
-  uBub: { background: "linear-gradient(135deg, #00dba8, #1a6ee0)", color: "#fff", padding: "10px 14px", borderRadius: "18px 18px 4px 18px", fontSize: 14, maxWidth: "78%", lineHeight: 1.55, fontWeight: 500, wordBreak: "break-word", overflowWrap: "anywhere" },
-  aBub: { background: "rgba(16,31,58,0.85)", backdropFilter: "blur(12px)", color: "rgba(255,255,255,0.85)", padding: "11px 14px", borderRadius: "18px 18px 18px 4px", fontSize: 14, maxWidth: "82%", lineHeight: 1.6, fontWeight: 300, border: "1px solid rgba(255,255,255,0.07)", wordBreak: "break-word", overflowWrap: "anywhere" },
-  dot: { animation: "dotPulse 1s ease-in-out infinite", fontSize: 10, color: "#00dba8" },
+  uBub: { background: "#1FCD79", color: "#062E1A", padding: "10px 14px", borderRadius: "16px 16px 4px 16px", fontSize: 14, maxWidth: "78%", lineHeight: 1.55, fontWeight: 500, wordBreak: "break-word", overflowWrap: "anywhere" },
+  aBub: { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.9)", padding: "11px 14px", borderRadius: "16px 16px 16px 4px", fontSize: 14, maxWidth: "82%", lineHeight: 1.6, fontWeight: 400, wordBreak: "break-word", overflowWrap: "anywhere" },
+  dot: { animation: "dotPulse 1s ease-in-out infinite", fontSize: 10, color: "#1FCD79" },
   chatBar: { display: "flex", gap: 8, padding: "10px 16px 12px", flexShrink: 0 },
-  chatIn: { flex: 1, padding: "10px 14px", background: "rgba(16,31,58,0.8)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 14, color: "#fff", fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif", outline: "none", fontWeight: 300 },
-  sendBtn: { width: 42, height: 42, background: "linear-gradient(135deg,#00dba8,#1a6ee0)", color: "#fff", border: "none", borderRadius: 14, fontSize: 18, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(0,219,168,0.3)" },
+  chatIn: { flex: 1, padding: "10px 16px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 22, color: "rgba(255,255,255,0.9)", fontSize: 14, fontFamily: "'Geist', sans-serif", outline: "none", fontWeight: 400 },
+  sendBtn: { width: 44, height: 44, background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: "50%", fontSize: 18, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
   // Google
-  gcBanner: { display: "flex", alignItems: "center", gap: 12, background: "rgba(56,170,255,0.06)", border: "1px solid rgba(56,170,255,0.15)", borderRadius: 14, padding: "12px 14px", marginBottom: 12 },
-  gcBtn: { padding: "6px 14px", background: "#38aaff", color: "#071428", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap" },
+  gcBanner: { display: "flex", alignItems: "center", gap: 12, background: "#DBEAFE", border: "1px solid rgba(59,130,246,0.2)", borderRadius: 14, padding: "12px 14px", marginBottom: 12 },
+  gcBtn: { padding: "7px 14px", background: "#3B82F6", color: "#fff", border: "none", borderRadius: 999, fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "'Geist', sans-serif", whiteSpace: "nowrap" },
   // Attach menu & file chip
-  attachMenu: { background: "rgba(16,31,58,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.1)", borderTop: "1px solid rgba(255,255,255,0.08)", padding: "8px 8px 0", animation: "slideUp 0.2s ease" },
-  attachOpt: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 14px", background: "none", border: "none", color: "#fff", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", borderRadius: 12, textAlign: "left", transition: "background 0.15s" },
-  fileChip: { display: "flex", alignItems: "center", gap: 10, background: "rgba(52,168,83,0.12)", border: "1px solid rgba(52,168,83,0.3)", borderRadius: 12, padding: "8px 12px", margin: "0 0 6px", animation: "slideUp 0.2s ease" },
+  attachMenu: { background: "rgba(10,18,51,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.1)", borderTop: "1px solid rgba(255,255,255,0.08)", padding: "8px 8px 0", animation: "slideUp 0.2s ease" },
+  attachOpt: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 14px", background: "none", border: "none", color: "#fff", cursor: "pointer", fontFamily: "'Geist', sans-serif", borderRadius: 12, textAlign: "left", transition: "background 0.15s" },
+  fileChip: { display: "flex", alignItems: "center", gap: 10, background: "rgba(31,205,121,0.12)", border: "1px solid rgba(31,205,121,0.3)", borderRadius: 12, padding: "8px 12px", margin: "0 0 6px", animation: "slideUp 0.2s ease" },
   // Drive picker overlay
   overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", zIndex: 300, display: "flex", alignItems: "flex-end" },
-  pickerSheet: { background: "rgba(10,20,42,0.98)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: "20px 20px 0 0", padding: "24px 20px 40px", width: "100%", maxHeight: "70vh", overflowY: "auto", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 -8px 48px rgba(0,0,0,0.5)" },
-  sheetRow: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 14px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, marginBottom: 8, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", color: "#fff", transition: "background 0.15s" },
-  // Bottom nav
-  bottomNav: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, display: "flex", background: "rgba(6,14,30,0.92)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", borderTop: "1px solid rgba(255,255,255,0.07)", padding: "6px 0 env(safe-area-inset-bottom,6px)", zIndex: 100 },
-  navBtn: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "6px 0", background: "none", border: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", position: "relative", transition: "color .2s ease" },
-  navBtnOn: { color: "#00f5c0" },
-  navLbl: { fontSize: 9, fontWeight: 600, letterSpacing: "0.5px", textTransform: "uppercase" },
-  navDot: { position: "absolute", bottom: -2, width: 4, height: 4, borderRadius: "50%", background: "#00f5c0", boxShadow: "0 0 6px #00f5c0" },
-  badge: { position: "absolute", top: -4, right: -8, minWidth: 16, height: 16, borderRadius: 8, background: "#ef4444", color: "#fff", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" },
+  pickerSheet: { background: "rgba(10,18,51,0.98)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: "20px 20px 0 0", padding: "24px 20px 40px", width: "100%", maxHeight: "70vh", overflowY: "auto", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 -8px 48px rgba(0,0,0,0.5)" },
+  sheetRow: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 14px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, marginBottom: 8, cursor: "pointer", fontFamily: "'Geist', sans-serif", color: "#fff", transition: "background 0.15s" },
+  // Bottom nav — light frosted glass
+  bottomNav: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, display: "flex", background: "rgba(252,252,251,0.92)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid #E8E8E4", padding: "8px 0 env(safe-area-inset-bottom,8px)", zIndex: 100 },
+  navBtn: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "6px 0", background: "none", border: "none", color: "#7A7A85", cursor: "pointer", fontFamily: "'Geist', sans-serif", position: "relative", transition: "color .15s ease" },
+  navBtnOn: { color: "#14141A" },
+  navLbl: { fontSize: 9, fontWeight: 500, letterSpacing: "0.15em", textTransform: "uppercase", fontFamily: "'Geist Mono', monospace" },
+  navDot: { position: "absolute", bottom: -2, width: 4, height: 4, borderRadius: "50%", background: "#1FCD79" },
+  badge: { position: "absolute", top: -4, right: -8, minWidth: 16, height: 16, borderRadius: 8, background: "#1FCD79", color: "#062E1A", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", fontFamily: "'Geist Mono', monospace" },
   // Floating button
-  fab: { position: "fixed", bottom: 76, right: "calc(50% - 228px)", width: 48, height: 48, borderRadius: "50%", background: "linear-gradient(135deg,#00dba8,#1a6ee0)", border: "none", color: "#fff", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(0,219,168,0.5)", animation: "fabPulse 3s ease-in-out infinite", zIndex: 99 },
+  fab: { position: "fixed", bottom: 76, right: "calc(50% - 228px)", width: 52, height: 52, borderRadius: "50%", background: "#1FCD79", border: "none", color: "#062E1A", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(31,205,121,0.35)", zIndex: 99 },
 };
