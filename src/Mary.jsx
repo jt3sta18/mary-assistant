@@ -2602,7 +2602,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
             <div style={S.chatHeader}>
               <div style={{display:"flex",alignItems:"center",gap:12}}>
                 <div style={S.chatAvatar}>
-                  <img src="/finoveo-logo.png" alt="Finoveo" style={{width:28,height:28,objectFit:"contain"}} />
+                  <img src="/finoveo-logo.png" alt="Finoveo" style={{width:22,height:22,objectFit:"contain"}} />
                 </div>
                 <div>
                   <div style={{fontSize:16,fontWeight:700,color:"#F0F2F5",letterSpacing:"-0.3px",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Mary</div>
@@ -2996,7 +2996,7 @@ const S = {
   hint: { fontSize: 12, color: "rgba(255,255,255,0.4)", padding: "8px 0 16px", lineHeight: 1.5, borderBottom: "1px solid rgba(255,255,255,0.06)", marginBottom: 16 },
   chatWrap: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: "linear-gradient(165deg, #0A1233 0%, #050B25 100%)" },
   chatHeader: { flexShrink: 0, padding: "14px 20px 12px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(8,14,26,0.5)" },
-  chatAvatar: { width: 38, height: 38, borderRadius: "50%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" },
+  chatAvatar: { width: 38, height: 38, borderRadius: "50%", background: "rgba(0,180,170,0.08)", border: "2px solid rgba(0,180,170,0.7)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" },
   newChatBtn: { fontSize: 11, color: "rgba(255,255,255,0.35)", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 999, padding: "5px 12px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 500 },
   chatScroll: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", padding: "16px 16px 8px" },
   chatBottom: { flexShrink: 0, background: "rgba(8,14,26,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.07)", paddingBottom: "env(safe-area-inset-bottom, 0px)" },
