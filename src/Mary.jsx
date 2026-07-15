@@ -1173,7 +1173,7 @@ export default function Mary() {
         if (tokenClientRef.current) {
           try { tokenClientRef.current.requestAccessToken({ prompt: "" }); } catch {}
         }
-        if (minsLeft <= 5) setGoogleTokenExpiring(true); // only show warning banner in last 5 mins
+        // silent refresh already attempted above — no banner needed
       } else {
         setGoogleTokenExpiring(false);
       }
@@ -1237,8 +1237,8 @@ export default function Mary() {
       if (!tokenClientRef.current) return;
       const expiry = parseInt(localStorage.getItem("mary-google-token-expiry") || "0");
       const minsLeft = (expiry - Date.now()) / 60000;
-      // Refresh if expired or expiring within 30 minutes
-      if (minsLeft < 30) {
+      // Refresh if expired or expiring within 60 minutes (aggressive)
+      if (minsLeft < 60) {
         try { tokenClientRef.current.requestAccessToken({ prompt: "" }); } catch {}
       }
     };
@@ -2339,16 +2339,6 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       <div style={S.blob2} />
       <div style={S.blob3} />
 
-      {/* Notification Banner */}
-      {notifPerm !== "granted" && (
-        <div style={S.notifBanner}>
-          <div style={S.notifRow}>
-            <div><div style={S.notifTitle}>🔔 Enable notifications</div><div style={S.notifDesc}>Get alerts for reminders & meetings</div></div>
-            <button onClick={enableNotif} style={S.notifBtn}>Enable</button>
-          </div>
-        </div>
-      )}
-
       {/* Header — hidden on pipeline and chat tabs */}
       {tab !== "pipeline" && tab !== "chat" && <header style={S.header}>
         <div style={S.headerRow}>
@@ -2375,17 +2365,6 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         {/* ── TODAY ── */}
         {tab === "today" && (
           <div style={S.anim}>
-            {/* Google token expiring soon — reconnect banner */}
-            {googleToken && googleTokenExpiring && (
-              <div style={{...S.gcBanner, background:"#FFFBE5", border:"1px solid #FDE68A"}}>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:600,color:"#92400E",marginBottom:2}}>⚠️ Google session expiring</div>
-                  <div style={{fontSize:12,color:"#78350F"}}>Tap Reconnect to keep calendar, Gmail & pipeline access</div>
-                </div>
-                <button onClick={connectGoogle} style={{...S.gcBtn, background:"#FCD34D", color:"#78350F", border:"none"}}>Reconnect</button>
-              </div>
-            )}
-
             {/* Google Calendar connection banner - only show when not connected */}
             {GOOGLE_CLIENT_ID && !googleToken && (
               <div style={S.gcBanner}>
@@ -2394,28 +2373,6 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                   <div style={{fontSize:12,color:"rgba(255,255,255,0.45)"}}>See your real schedule in the daily briefing</div>
                 </div>
                 <button onClick={connectGoogle} disabled={googleLoading} style={S.gcBtn}>{googleLoading ? "..." : "Connect"}</button>
-              </div>
-            )}
-
-            {/* Bible Verse */}
-            {verse && (
-              <div style={S.verseCard}>
-                <div style={S.verseMark}>✦</div>
-                <div style={S.verseText}>"{verse.text}"</div>
-                <div style={S.verseFooter}>
-                  <div style={S.verseRef}>— {verse.reference}</div>
-                  <button onClick={() => {
-                    const shareText = `"${verse.text}"\n— ${verse.reference}`;
-                    if (navigator.share) {
-                      navigator.share({ title: "Daily Verse", text: shareText }).catch(() => {});
-                    } else {
-                      navigator.clipboard.writeText(shareText).then(() => {
-                        const btn = document.getElementById("share-verse-btn");
-                        if (btn) { btn.textContent = "Copied!"; setTimeout(() => { btn.textContent = "Share ↗"; }, 2000); }
-                      });
-                    }
-                  }} id="share-verse-btn" style={S.shareBtn}>Share ↗</button>
-                </div>
               </div>
             )}
 
@@ -2615,13 +2572,6 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                   </div>
                 ))}
                 <button onClick={() => setReminders((p) => p.filter((r) => !r.fired))} style={S.clrDone}>Clear fired</button>
-              </div>
-            )}
-            {notifPerm !== "granted" && (
-              <div style={{...S.card,marginTop:16,borderColor:"rgba(31,205,121,0.2)"}}>
-                <div style={{fontSize:13,fontWeight:600,color:"#1FCD79"}}>⚠️ Notifications not enabled</div>
-                <div style={{fontSize:12,color:"rgba(255,255,255,0.45)",marginBottom:10}}>Enable to receive push alerts for your reminders.</div>
-                <button onClick={enableNotif} style={S.qBtn}>Enable Notifications</button>
               </div>
             )}
           </div>
