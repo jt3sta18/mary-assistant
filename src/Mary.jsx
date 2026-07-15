@@ -2360,7 +2360,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
       </header>}
 
       {/* Content */}
-      <main style={tab === "pipeline" ? {...S.main, padding: 0, paddingBottom: "calc(52px + env(safe-area-inset-bottom, 0px))", overflowY: "hidden", display: "flex", flexDirection: "column", background: PP.navy} : tab === "chat" ? {...S.main, padding: 0, paddingBottom: "calc(52px + env(safe-area-inset-bottom, 0px))", overflowY: "hidden", display: "flex", flexDirection: "column"} : S.main}>
+      <main style={tab === "pipeline" ? {...S.main, padding: 0, paddingBottom: "calc(52px + env(safe-area-inset-bottom, 0px))", overflowY: "hidden", display: "flex", flexDirection: "column", background: PP.navy} : tab === "chat" ? {...S.main, padding: 0, paddingBottom: "calc(60px + env(safe-area-inset-bottom, 0px))", overflowY: "hidden", display: "flex", flexDirection: "column"} : S.main}>
 
         {/* ── TODAY ── */}
         {tab === "today" && (
@@ -2583,6 +2583,19 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         {/* ── CHAT ── */}
         {tab === "chat" && (
           <div style={S.chatWrap}>
+            {/* Chat header */}
+            <div style={S.chatHeader}>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={S.chatAvatar}>✦</div>
+                <div>
+                  <div style={{fontSize:16,fontWeight:700,color:"#F0F2F5",letterSpacing:"-0.3px",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Mary</div>
+                  <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Mono',monospace",letterSpacing:"0.1em",textTransform:"uppercase",marginTop:1}}>AI Assistant · Finoveo</div>
+                </div>
+              </div>
+              {chat.length > 0 && (
+                <button onClick={() => { setChat([]); saveData("mary-chat", []); }} style={S.newChatBtn}>✕ New chat</button>
+              )}
+            </div>
             {/* ── Scrollable messages — fully independent ── */}
             <div style={S.chatScroll}>
               {!chat.length && (
@@ -2640,11 +2653,6 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                     <div style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>{attachedFile.type === "pdf" ? "PDF — ready to read" : attachedFile.type === "image" ? "Image — Mary can see this" : `${attachedFile.rows} rows`}</div>
                   </div>
                   <button onClick={() => setAttachedFile(null)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.3)",cursor:"pointer",fontSize:14,padding:4}}>✕</button>
-                </div>
-              )}
-              {chat.length > 0 && (
-                <div style={{display:"flex",justifyContent:"center",padding:"2px 16px 0"}}>
-                  <button onClick={() => { setChat([]); saveData("mary-chat", []); }} style={{fontSize:11,color:"rgba(255,255,255,0.25)",background:"none",border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",letterSpacing:"0.3px"}}>✕ New chat</button>
                 </div>
               )}
               <div style={S.chatBar}>
@@ -2951,8 +2959,11 @@ const S = {
   clrDone: { background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 11, cursor: "pointer", marginTop: 8, fontFamily: "'Plus Jakarta Sans', sans-serif", textDecoration: "underline" },
   hint: { fontSize: 12, color: "rgba(255,255,255,0.4)", padding: "8px 0 16px", lineHeight: 1.5, borderBottom: "1px solid rgba(255,255,255,0.06)", marginBottom: 16 },
   chatWrap: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: "linear-gradient(165deg, #0A1233 0%, #050B25 100%)" },
+  chatHeader: { flexShrink: 0, padding: "14px 20px 12px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(8,14,26,0.5)" },
+  chatAvatar: { width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg, rgba(31,205,121,0.15), rgba(59,130,246,0.15))", border: "1px solid rgba(31,205,121,0.3)", display: "flex", alignItems: "center", justifyContent: "center", color: "#1FCD79", fontSize: 16, flexShrink: 0 },
+  newChatBtn: { fontSize: 11, color: "rgba(255,255,255,0.35)", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 999, padding: "5px 12px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 500 },
   chatScroll: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", padding: "16px 16px 8px" },
-  chatBottom: { flexShrink: 0, background: "rgba(8,14,26,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.07)" },
+  chatBottom: { flexShrink: 0, background: "rgba(8,14,26,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.07)", paddingBottom: "env(safe-area-inset-bottom, 0px)" },
   chatEmpty: { textAlign: "center", padding: "32px 8px" },
   sug: { padding: "10px 14px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 999, color: "rgba(255,255,255,0.75)", fontSize: 13, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: "left", fontWeight: 400 },
   uMsg: { display: "flex", justifyContent: "flex-end", marginBottom: 12 },
@@ -2961,7 +2972,7 @@ const S = {
   uBub: { background: "#1FCD79", color: "#062E1A", padding: "10px 14px", borderRadius: "16px 16px 4px 16px", fontSize: 14, maxWidth: "78%", lineHeight: 1.55, fontWeight: 500, wordBreak: "break-word", overflowWrap: "anywhere" },
   aBub: { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.9)", padding: "11px 14px", borderRadius: "16px 16px 16px 4px", fontSize: 14, maxWidth: "82%", lineHeight: 1.6, fontWeight: 400, wordBreak: "break-word", overflowWrap: "anywhere" },
   dot: { animation: "dotPulse 1s ease-in-out infinite", fontSize: 10, color: "#1FCD79" },
-  chatBar: { display: "flex", gap: 8, padding: "10px 16px 12px", flexShrink: 0 },
+  chatBar: { display: "flex", gap: 8, padding: "10px 16px 14px", flexShrink: 0 },
   chatIn: { flex: 1, padding: "10px 16px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 22, color: "rgba(255,255,255,0.9)", fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif", outline: "none", fontWeight: 400 },
   sendBtn: { width: 44, height: 44, background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: "50%", fontSize: 18, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
   gcBanner: { display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "14px 16px", marginBottom: 12 },
