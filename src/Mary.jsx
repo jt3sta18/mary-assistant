@@ -777,7 +777,7 @@ const PC = { high: "#ef4444", medium: "#D9E84A", low: "#7A7A85" };
 // PIPELINE TAB — constants, helpers, sub-components (outside Mary fn)
 // ═══════════════════════════════════════════════════════════════════════
 const PP = { navy:"#071428", deep:"#0c1a34", card:"#101f3a", border:"rgba(255,255,255,0.10)", bL:"rgba(255,255,255,0.06)", teal:"#00dba8", teal2:"#00f5c0", blue:"#1a6ee0", blue2:"#38aaff", gold:"#f5c518", white:"#fff", soft:"rgba(255,255,255,0.65)", muted:"#7a96bc", red:"#ff6b6b", purple:"#a78bfa" };
-const PPF = "'Geist',-apple-system,sans-serif";
+const PPF = "'Plus Jakarta Sans',-apple-system,sans-serif";
 const PPGRAD = "linear-gradient(90deg,#00f5c0,#38aaff)";
 
 // Status constants
@@ -2332,7 +2332,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
 
   return (
     <div style={S.root}>
-      <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+      <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
       {/* Background blobs */}
       <div style={S.blob1} />
@@ -2349,11 +2349,14 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         </div>
       )}
 
-      {/* Header — hidden on pipeline tab (pipeline has its own toolbar) */}
-      {tab !== "pipeline" && <header style={S.header}>
+      {/* Header — hidden on pipeline and chat tabs */}
+      {tab !== "pipeline" && tab !== "chat" && <header style={S.header}>
         <div style={S.headerRow}>
           <div>
-            <div style={S.logo}><span style={gradText}>{`Hi, ${userName || "James"}`}</span></div>
+            {tab === "today"
+              ? <div style={S.logo}><span style={gradText}>{`Hi, ${userName || "James"}`}</span></div>
+              : <div style={{...S.logo, fontSize:18, color:"rgba(255,255,255,0.85)", fontWeight:600}}>Inbox</div>
+            }
             <div style={S.dateLbl}>{dateStr}</div>
           </div>
           <div style={{display:"flex",alignItems:"center"}}>
@@ -2554,7 +2557,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
                       placeholder="Write your reply..."
-                      style={{width:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"rgba(255,255,255,0.88)",fontSize:13,padding:"8px 10px",fontFamily:"'Geist',sans-serif",resize:"vertical",minHeight:80,outline:"none",boxSizing:"border-box"}}
+                      style={{width:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"rgba(255,255,255,0.88)",fontSize:13,padding:"8px 10px",fontFamily:"'Plus Jakarta Sans',sans-serif",resize:"vertical",minHeight:80,outline:"none",boxSizing:"border-box"}}
                     />
                     <div style={{display:"flex",gap:8,marginTop:8}}>
                       <button disabled={replySending || !replyText.trim()} onClick={async () => {
@@ -2688,7 +2691,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               )}
               {chat.length > 0 && (
                 <div style={{display:"flex",justifyContent:"center",padding:"2px 16px 0"}}>
-                  <button onClick={() => { setChat([]); saveData("mary-chat", []); }} style={{fontSize:11,color:"rgba(255,255,255,0.25)",background:"none",border:"none",cursor:"pointer",fontFamily:"'Geist',sans-serif",letterSpacing:"0.3px"}}>✕ New chat</button>
+                  <button onClick={() => { setChat([]); saveData("mary-chat", []); }} style={{fontSize:11,color:"rgba(255,255,255,0.25)",background:"none",border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",letterSpacing:"0.3px"}}>✕ New chat</button>
                 </div>
               )}
               <div style={S.chatBar}>
@@ -2937,7 +2940,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
 }
 
 const S = {
-  root: { fontFamily: "'Geist', -apple-system, sans-serif", background: "#080E1A", color: "#F0F2F5", height: "100dvh", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" },
+  root: { fontFamily: "'Plus Jakarta Sans', -apple-system, sans-serif", background: "#080E1A", color: "#F0F2F5", height: "100dvh", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" },
   blob1: { display: "none" },
   blob2: { display: "none" },
   blob3: { display: "none" },
@@ -2945,60 +2948,60 @@ const S = {
   notifRow: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 },
   notifTitle: { fontSize: 12, fontWeight: 600, color: "#1FCD79" },
   notifDesc: { fontSize: 11, color: "rgba(255,255,255,0.45)" },
-  notifBtn: { padding: "6px 16px", background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: 999, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Geist', sans-serif", whiteSpace: "nowrap" },
+  notifBtn: { padding: "6px 16px", background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: 999, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap" },
   header: { padding: "20px 20px 14px", background: "rgba(8,14,26,0.96)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.07)", position: "relative", zIndex: 10 },
   headerRow: { display: "flex", justifyContent: "space-between", alignItems: "center" },
   logo: { fontSize: 22, fontWeight: 600, letterSpacing: "-0.5px", lineHeight: 1, color: "#F0F2F5" },
-  dateLbl: { fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 4, fontWeight: 500, fontFamily: "'Geist Mono', monospace", textTransform: "uppercase", letterSpacing: "0.15em" },
+  dateLbl: { fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 4, fontWeight: 500, fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.15em" },
   greet: { fontSize: 12, color: "rgba(255,255,255,0.35)", fontWeight: 400, textAlign: "right" },
-  poweredBy: { display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 500, fontFamily: "'Geist Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase" },
+  poweredBy: { display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 500, fontFamily: "'DM Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase" },
   liveDot: { width: 6, height: 6, borderRadius: "50%", background: "#1FCD79", animation: "livePulse 2s ease-in-out infinite" },
   main: { flex: 1, padding: "16px 16px 90px", overflowY: "auto", position: "relative", zIndex: 1 },
   anim: { animation: "slideUp 0.3s cubic-bezier(0.16,1,0.3,1)" },
   card: { background: "#0F1628", borderRadius: 16, padding: 16, marginBottom: 12, border: "1px solid rgba(255,255,255,0.07)", boxShadow: "0 2px 16px rgba(0,0,0,0.25)" },
   cHead: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 },
   headDot: { width: 6, height: 6, borderRadius: "50%", background: "#1FCD79", flexShrink: 0 },
-  cTitle: { fontSize: 10, fontWeight: 500, flex: 1, textTransform: "uppercase", letterSpacing: "0.18em", color: "rgba(255,255,255,0.3)", fontFamily: "'Geist Mono', monospace" },
-  seeAll: { background: "none", border: "none", color: "rgba(255,255,255,0.6)", fontSize: 13, cursor: "pointer", fontFamily: "'Geist', sans-serif", fontWeight: 500 },
-  refreshBtn: { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "rgba(255,255,255,0.35)", fontSize: 10, cursor: "pointer", fontFamily: "'Geist', sans-serif", fontWeight: 500, padding: "4px 10px" },
+  cTitle: { fontSize: 10, fontWeight: 500, flex: 1, textTransform: "uppercase", letterSpacing: "0.18em", color: "rgba(255,255,255,0.3)", fontFamily: "'DM Mono', monospace" },
+  seeAll: { background: "none", border: "none", color: "rgba(255,255,255,0.6)", fontSize: 13, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500 },
+  refreshBtn: { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "rgba(255,255,255,0.35)", fontSize: 10, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, padding: "4px 10px" },
   tomorrowCard: { background: "#0F1628", borderRadius: 16, padding: 16, marginBottom: 12, border: "1px solid rgba(255,255,255,0.07)", boxShadow: "0 2px 16px rgba(0,0,0,0.25)" },
   bText: { fontSize: 14, lineHeight: 1.75, color: "rgba(255,255,255,0.78)", fontWeight: 400 },
   verseCard: { background: "linear-gradient(165deg, #111E3C 0%, #0A1228 100%)", borderRadius: 20, padding: "24px 20px", marginBottom: 12, border: "1px solid rgba(255,255,255,0.08)", position: "relative", overflow: "hidden", boxShadow: "0 4px 24px rgba(0,0,0,0.4)" },
   verseMark: { position: "absolute", top: -10, left: 12, fontSize: 80, opacity: 0.06, color: "#1FCD79", lineHeight: 1, fontFamily: "Georgia, serif", pointerEvents: "none" },
   verseText: { fontSize: 15, lineHeight: 1.8, color: "rgba(255,255,255,0.88)", fontWeight: 300, fontStyle: "italic", marginBottom: 14, fontFamily: "Georgia, serif", position: "relative" },
   verseFooter: { display: "flex", justifyContent: "space-between", alignItems: "center" },
-  verseRef: { fontSize: 11, fontWeight: 600, color: "#1FCD79", letterSpacing: "0.08em", fontFamily: "'Geist Mono', monospace" },
-  shareBtn: { padding: "5px 14px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 999, color: "rgba(255,255,255,0.65)", fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "'Geist', sans-serif" },
+  verseRef: { fontSize: 11, fontWeight: 600, color: "#1FCD79", letterSpacing: "0.08em", fontFamily: "'DM Mono', monospace" },
+  shareBtn: { padding: "5px 14px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 999, color: "rgba(255,255,255,0.65)", fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" },
   skelWrap: { display: "flex", flexDirection: "column", gap: 8 },
   skel: { height: 13, background: "rgba(255,255,255,0.06)", borderRadius: 6, animation: "pulse 1.5s ease-in-out infinite" },
   evItem: { display: "flex", gap: 12, alignItems: "flex-start", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" },
-  evTime: { fontSize: 11, fontWeight: 500, color: "#1FCD79", minWidth: 65, paddingTop: 2, fontFamily: "'Geist Mono', monospace", letterSpacing: "0.04em" },
+  evTime: { fontSize: 11, fontWeight: 500, color: "#1FCD79", minWidth: 65, paddingTop: 2, fontFamily: "'DM Mono', monospace", letterSpacing: "0.04em" },
   evInfo: { flex: 1 },
   evTitle: { fontSize: 14, fontWeight: 500, color: "#F0F2F5" },
   evLoc: { fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 2 },
-  durPill: { fontSize: 9, fontWeight: 600, color: "#60A5FA", background: "rgba(59,130,246,0.15)", borderRadius: 999, padding: "2px 8px", flexShrink: 0, fontFamily: "'Geist Mono', monospace" },
+  durPill: { fontSize: 9, fontWeight: 600, color: "#60A5FA", background: "rgba(59,130,246,0.15)", borderRadius: 999, padding: "2px 8px", flexShrink: 0, fontFamily: "'DM Mono', monospace" },
   mini: { display: "flex", alignItems: "center", gap: 8, padding: "7px 0" },
   pDot: { width: 6, height: 6, borderRadius: "50%", flexShrink: 0 },
   miniT: { fontSize: 13, flex: 1, fontWeight: 400, color: "#F0F2F5" },
-  miniD: { fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'Geist Mono', monospace" },
+  miniD: { fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'DM Mono', monospace" },
   qActions: { display: "flex", gap: 8, marginTop: 8 },
-  qBtn: { flex: 1, padding: "14px 16px", background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: 14, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Geist', sans-serif" },
-  qBtn2: { flex: 1, padding: "14px 16px", background: "rgba(255,255,255,0.06)", color: "#F0F2F5", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 14, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "'Geist', sans-serif" },
+  qBtn: { flex: 1, padding: "14px 16px", background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: 14, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" },
+  qBtn2: { flex: 1, padding: "14px 16px", background: "rgba(255,255,255,0.06)", color: "#F0F2F5", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 14, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" },
   addRow: { display: "flex", gap: 8, marginBottom: 16 },
-  addIn: { flex: 1, padding: "12px 14px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, color: "#F0F2F5", fontSize: 14, fontFamily: "'Geist', sans-serif", outline: "none", fontWeight: 400 },
+  addIn: { flex: 1, padding: "12px 14px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, color: "#F0F2F5", fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif", outline: "none", fontWeight: 400 },
   addBtn: { width: 44, height: 44, background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: 12, fontSize: 22, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
   empty: { textAlign: "center", padding: "48px 20px", color: "rgba(255,255,255,0.35)" },
-  secTitle: { fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.18em", color: "rgba(255,255,255,0.3)", marginBottom: 10, fontFamily: "'Geist Mono', monospace" },
+  secTitle: { fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.18em", color: "rgba(255,255,255,0.3)", marginBottom: 10, fontFamily: "'DM Mono', monospace" },
   tItem: { display: "flex", alignItems: "center", gap: 10, padding: "12px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" },
   chk: { background: "none", border: "none", color: "#1FCD79", fontSize: 20, cursor: "pointer", padding: 0, lineHeight: 1 },
   del: { background: "none", border: "none", color: "rgba(255,255,255,0.2)", fontSize: 14, cursor: "pointer", padding: 4 },
-  clrDone: { background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 11, cursor: "pointer", marginTop: 8, fontFamily: "'Geist', sans-serif", textDecoration: "underline" },
+  clrDone: { background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 11, cursor: "pointer", marginTop: 8, fontFamily: "'Plus Jakarta Sans', sans-serif", textDecoration: "underline" },
   hint: { fontSize: 12, color: "rgba(255,255,255,0.4)", padding: "8px 0 16px", lineHeight: 1.5, borderBottom: "1px solid rgba(255,255,255,0.06)", marginBottom: 16 },
   chatWrap: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: "linear-gradient(165deg, #0A1233 0%, #050B25 100%)" },
   chatScroll: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", padding: "16px 16px 8px" },
   chatBottom: { flexShrink: 0, background: "rgba(8,14,26,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.07)" },
   chatEmpty: { textAlign: "center", padding: "32px 8px" },
-  sug: { padding: "10px 14px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 999, color: "rgba(255,255,255,0.75)", fontSize: 13, cursor: "pointer", fontFamily: "'Geist', sans-serif", textAlign: "left", fontWeight: 400 },
+  sug: { padding: "10px 14px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 999, color: "rgba(255,255,255,0.75)", fontSize: 13, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: "left", fontWeight: 400 },
   uMsg: { display: "flex", justifyContent: "flex-end", marginBottom: 12 },
   aMsg: { display: "flex", justifyContent: "flex-start", gap: 8, marginBottom: 12, alignItems: "flex-start" },
   av: { marginTop: 8, flexShrink: 0 },
@@ -3006,21 +3009,21 @@ const S = {
   aBub: { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.9)", padding: "11px 14px", borderRadius: "16px 16px 16px 4px", fontSize: 14, maxWidth: "82%", lineHeight: 1.6, fontWeight: 400, wordBreak: "break-word", overflowWrap: "anywhere" },
   dot: { animation: "dotPulse 1s ease-in-out infinite", fontSize: 10, color: "#1FCD79" },
   chatBar: { display: "flex", gap: 8, padding: "10px 16px 12px", flexShrink: 0 },
-  chatIn: { flex: 1, padding: "10px 16px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 22, color: "rgba(255,255,255,0.9)", fontSize: 14, fontFamily: "'Geist', sans-serif", outline: "none", fontWeight: 400 },
+  chatIn: { flex: 1, padding: "10px 16px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 22, color: "rgba(255,255,255,0.9)", fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif", outline: "none", fontWeight: 400 },
   sendBtn: { width: 44, height: 44, background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: "50%", fontSize: 18, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
   gcBanner: { display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "14px 16px", marginBottom: 12 },
-  gcBtn: { padding: "8px 18px", background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Geist', sans-serif", whiteSpace: "nowrap" },
+  gcBtn: { padding: "8px 18px", background: "#1FCD79", color: "#062E1A", border: "none", borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap" },
   attachMenu: { background: "rgba(10,18,51,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.1)", borderTop: "1px solid rgba(255,255,255,0.08)", padding: "8px 8px 0", animation: "slideUp 0.2s ease" },
-  attachOpt: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 14px", background: "none", border: "none", color: "#fff", cursor: "pointer", fontFamily: "'Geist', sans-serif", borderRadius: 12, textAlign: "left", transition: "background 0.15s" },
+  attachOpt: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 14px", background: "none", border: "none", color: "#fff", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", borderRadius: 12, textAlign: "left", transition: "background 0.15s" },
   fileChip: { display: "flex", alignItems: "center", gap: 10, background: "rgba(31,205,121,0.12)", border: "1px solid rgba(31,205,121,0.3)", borderRadius: 12, padding: "8px 12px", margin: "0 0 6px", animation: "slideUp 0.2s ease" },
   overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", zIndex: 300, display: "flex", alignItems: "flex-end" },
   pickerSheet: { background: "rgba(10,18,51,0.98)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: "20px 20px 0 0", padding: "24px 20px 40px", width: "100%", maxHeight: "70vh", overflowY: "auto", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 -8px 48px rgba(0,0,0,0.5)" },
-  sheetRow: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 14px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, marginBottom: 8, cursor: "pointer", fontFamily: "'Geist', sans-serif", color: "#fff", transition: "background 0.15s" },
+  sheetRow: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 14px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, marginBottom: 8, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", color: "#fff", transition: "background 0.15s" },
   bottomNav: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, display: "flex", background: "rgba(8,14,26,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.07)", padding: "8px 0 env(safe-area-inset-bottom,8px)", zIndex: 100 },
-  navBtn: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 0", background: "none", border: "none", cursor: "pointer", fontFamily: "'Geist', sans-serif", position: "relative", transition: "opacity .15s ease" },
+  navBtn: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 0", background: "none", border: "none", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", position: "relative", transition: "opacity .15s ease" },
   navBtnOn: { opacity: 1 },
-  navLbl: { fontSize: 9, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "'Geist Mono', monospace", color: "inherit" },
+  navLbl: { fontSize: 9, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "'DM Mono', monospace", color: "inherit" },
   navDot: { position: "absolute", bottom: -2, width: 4, height: 4, borderRadius: "50%", background: "#1FCD79" },
-  badge: { position: "absolute", top: -4, right: -8, minWidth: 16, height: 16, borderRadius: 8, background: "#1FCD79", color: "#062E1A", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", fontFamily: "'Geist Mono', monospace" },
+  badge: { position: "absolute", top: -4, right: -8, minWidth: 16, height: 16, borderRadius: 8, background: "#1FCD79", color: "#062E1A", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", fontFamily: "'DM Mono', monospace" },
   fab: { display: "none" },
 };
