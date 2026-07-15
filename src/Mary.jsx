@@ -71,7 +71,7 @@ Banks and credit unions only see transaction history — not customer intent. Th
 `;
 
 function buildSystemPrompt() {
-  const name = localStorage.getItem("mary-user-name") || "James";
+  const name = localStorage.getItem("mary-user-name") || "there";
   const memories = JSON.parse(localStorage.getItem("mary-memories") || "[]");
   const memorySection = memories.length
     ? `\n\n## Dynamic Memory (things ${name} has told you — treat as current facts)\n${memories.map((m, i) => `${i + 1}. ${m}`).join("\n")}`
