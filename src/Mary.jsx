@@ -2322,7 +2322,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
   const TAB_ICON = {
     today:    (on) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={on?"#1FCD79":"#56657A"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
     inbox:    (on) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={on?"#1FCD79":"#56657A"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
-    chat:     (on) => <svg width="22" height="21" viewBox="0 0 48 46" fill="none"><path fill={on?"#1FCD79":"#56657A"} d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z"/></svg>,
+    chat:     (on) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={on?"#1FCD79":"#56657A"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>,
     pipeline: (on) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={on?"#1FCD79":"#56657A"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
   };
   const TABS = [
@@ -2592,7 +2592,9 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
             {/* Chat header */}
             <div style={S.chatHeader}>
               <div style={{display:"flex",alignItems:"center",gap:12}}>
-                <div style={S.chatAvatar}>✦</div>
+                <div style={S.chatAvatar}>
+                  <svg width="22" height="21" viewBox="0 0 48 46" fill="none"><path fill="#863bff" d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z"/></svg>
+                </div>
                 <div>
                   <div style={{fontSize:16,fontWeight:700,color:"#F0F2F5",letterSpacing:"-0.3px",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Mary</div>
                   <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Mono',monospace",letterSpacing:"0.1em",textTransform:"uppercase",marginTop:1}}>AI Assistant · Finoveo</div>
@@ -2985,7 +2987,7 @@ const S = {
   hint: { fontSize: 12, color: "rgba(255,255,255,0.4)", padding: "8px 0 16px", lineHeight: 1.5, borderBottom: "1px solid rgba(255,255,255,0.06)", marginBottom: 16 },
   chatWrap: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: "linear-gradient(165deg, #0A1233 0%, #050B25 100%)" },
   chatHeader: { flexShrink: 0, padding: "14px 20px 12px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(8,14,26,0.5)" },
-  chatAvatar: { width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg, rgba(31,205,121,0.15), rgba(59,130,246,0.15))", border: "1px solid rgba(31,205,121,0.3)", display: "flex", alignItems: "center", justifyContent: "center", color: "#1FCD79", fontSize: 16, flexShrink: 0 },
+  chatAvatar: { width: 38, height: 38, borderRadius: "50%", background: "rgba(134,59,255,0.12)", border: "1px solid rgba(134,59,255,0.3)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   newChatBtn: { fontSize: 11, color: "rgba(255,255,255,0.35)", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 999, padding: "5px 12px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 500 },
   chatScroll: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", padding: "16px 16px 8px" },
   chatBottom: { flexShrink: 0, background: "rgba(8,14,26,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.07)", paddingBottom: "env(safe-area-inset-bottom, 0px)" },
