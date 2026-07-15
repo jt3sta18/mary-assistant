@@ -170,7 +170,7 @@ If they say "remind me in 30 minutes", calculate the exact time from now.
 When the user asks to clear, dismiss, or remove alerts/reminders: use "clear_reminders" — set to "all" to clear everything, "fired" to clear only ones that already fired, or an array of titles to clear specific ones.`;
 
 async function callClaude(messages) {
-  const body = { model: "claude-sonnet-4-20250514", max_tokens: 1500, system: buildSystemPrompt(), messages };
+  const body = { model: "claude-sonnet-4-6", max_tokens: 1500, system: buildSystemPrompt(), messages };
   const res = await fetch("/api/chat", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
