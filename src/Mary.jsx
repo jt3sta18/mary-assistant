@@ -2518,10 +2518,33 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
             {!googleToken && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>📧</div><div style={{fontSize:16,fontWeight:600}}>Google not connected</div><div style={{fontSize:13,marginTop:4,color:"#7A7A85"}}>Connect Google to see your inbox</div></div>}
             {googleToken && !inboxEmails.length && <div style={S.empty}><div style={{fontSize:32,marginBottom:8,opacity:0.3}}>📭</div><div style={{fontSize:16,fontWeight:600}}>Inbox clear</div><div style={{fontSize:13,marginTop:4,color:"#7A7A85"}}>No unread work emails</div></div>}
             {inboxEmails.map((email, i) => (
-              <div key={i}
+              <div key={email.id || i}
                 onTouchStart={(e) => { emailSwipeRef.current = { startX: e.touches[0].clientX, idx: i }; e.currentTarget.style.transition = 'none'; }}
                 onTouchMove={(e) => { if (emailSwipeRef.current.idx !== i) return; const dx = Math.min(0, e.touches[0].clientX - emailSwipeRef.current.startX); if (dx < 0) { e.currentTarget.style.transform = `translateX(${dx}px)`; e.currentTarget.style.opacity = String(Math.max(0, 1 + dx / 120)); } }}
-                onTouchEnd={(e) => { if (emailSwipeRef.current.idx !== i) return; const dx = e.changedTouches[0].clientX - emailSwipeRef.current.startX; if (dx < -80) { e.currentTarget.style.transition = 'transform 0.25s ease, opacity 0.25s ease'; e.currentTarget.style.transform = 'translateX(-110%)'; e.currentTarget.style.opacity = '0'; setTimeout(() => { persistDismissedEmailId(email.id); setInboxEmails(p => p.filter((_, idx) => idx !== i)); }, 240); } else { e.currentTarget.style.transition = 'transform 0.3s ease'; e.currentTarget.style.transform = 'translateX(0)'; e.currentTarget.style.opacity = '1'; } emailSwipeRef.current = { startX: 0, idx: null }; }}
+                onTouchEnd={(e) => {
+                  if (emailSwipeRef.current.idx !== i) return;
+                  const dx = e.changedTouches[0].clientX - emailSwipeRef.current.startX;
+                  if (dx < -80) {
+                    const el = e.currentTarget;
+                    const h = el.offsetHeight;
+                    el.style.transition = 'transform 0.22s ease, opacity 0.22s ease';
+                    el.style.transform = 'translateX(-110%)';
+                    el.style.opacity = '0';
+                    setTimeout(() => {
+                      el.style.overflow = 'hidden';
+                      el.style.maxHeight = h + 'px';
+                      el.style.marginBottom = '10px';
+                      el.style.transition = 'max-height 0.18s ease, margin-bottom 0.18s ease';
+                      requestAnimationFrame(() => { el.style.maxHeight = '0'; el.style.marginBottom = '0'; });
+                      setTimeout(() => { persistDismissedEmailId(email.id); setInboxEmails(p => p.filter((_, j) => j !== i)); }, 190);
+                    }, 230);
+                  } else {
+                    e.currentTarget.style.transition = 'transform 0.3s ease';
+                    e.currentTarget.style.transform = 'translateX(0)';
+                    e.currentTarget.style.opacity = '1';
+                  }
+                  emailSwipeRef.current = { startX: 0, idx: null };
+                }}
                 style={{...S.card, marginBottom:10}}>
                 <div style={{fontSize:12,color:"#60A5FA",fontWeight:600,marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{email.from?.replace(/<.*>/, "").trim()}</div>
                 <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>{email.subject}</div>
