@@ -869,14 +869,21 @@ async function ppAiCall(prompt) {
 }
 
 async function ppGsFetch(onP) {
-  let all=[],off=0,lim=500,tot=Infinity;
-  while(off<tot) {
-    const r=await fetch("/api/sheets?scriptUrl="+encodeURIComponent(OUTBOUND_SCRIPT_URL)+"&action=getLeads&offset="+off+"&limit="+lim);
-    const d=await r.json();
-    if(!d.success) throw new Error(d.error||"Failed");
-    all=all.concat(d.data||[]); tot=d.total||0; off+=lim;
-    if(onP) onP(all.length, tot);
-    if(!d.data||!d.data.length) break;
+  const lim = 500;
+  const base = "/api/sheets?scriptUrl="+encodeURIComponent(OUTBOUND_SCRIPT_URL)+"&action=getLeads&limit="+lim;
+  // First batch to get total
+  const r0 = await fetch(base+"&offset=0");
+  const d0 = await r0.json();
+  if (!d0.success) throw new Error(d0.error||"Failed");
+  const tot = d0.total || 0;
+  let all = d0.data || [];
+  if (onP) onP(all.length, tot);
+  // Fire remaining batches in parallel
+  const offsets = [];
+  for (let off = lim; off < tot; off += lim) offsets.push(off);
+  if (offsets.length) {
+    const results = await Promise.all(offsets.map(off => fetch(base+"&offset="+off).then(r=>r.json())));
+    for (const d of results) { all = all.concat(d.data||[]); if(onP) onP(all.length, tot); }
   }
   return all.map(l=>({...l,lead_score:parseInt(l.lead_score)||0,linkedin_step:parseInt(l.linkedin_step)||0}));
 }
@@ -1733,10 +1740,19 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
     ppFlash("Lead added");
   };
 
-  // Load pipeline when tab first opened
+  // Load pipeline when tab first opened — use pre-warm cache if available
   useEffect(() => {
     if (tab === "pipeline" && ppLeads.length === 0 && !ppLoading) {
-      ppLoadLeads();
+      const cache = pipelineCacheRef.current;
+      const cacheAge = cache ? (Date.now() - cache.ts) / 60000 : Infinity;
+      if (cache?.leads?.length && cacheAge < 15) {
+        // Instant load from startup pre-warm cache
+        const d = cache.leads.map(l => ({...l, persona: l.persona || ppClassPersona(l.title)}));
+        setPpLeads(d);
+        ppFlash(`${d.length} leads loaded`);
+      } else {
+        ppLoadLeads();
+      }
     }
   }, [tab]);
 
