@@ -1925,13 +1925,33 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
             // Detect pronoun-only references so we can resolve from context
             const hasPronounRef = /\b(him|her|them|this person|that person|this lead|that lead|this contact|that contact)\b/.test(msgLower);
 
+            // Detect correction phrases — user is saying the last match was wrong
+            const isCorrection = /\b(wrong|different|not that|not him|not her|not them|the other|another one|other one|not the right|different one)\b/.test(msgLower);
+            if (isCorrection) lastDiscussedLeadRef.current = null;
+
             // Always try to find a specific lead — even on Gmail queries, the record
             // gives useful context (email address, company) without the bulk of the full list
-            let specificMatch = findLeadBySearch(leads, msgLower, lastDiscussedLeadRef.current);
+            let specificMatch = findLeadBySearch(leads, msgLower, isCorrection ? null : lastDiscussedLeadRef.current);
 
             // If no name match but message uses a pronoun, resolve from the last discussed lead
             if (!specificMatch && hasPronounRef && lastDiscussedLeadRef.current) {
               specificMatch = leads.find(l => l.id === lastDiscussedLeadRef.current.id) || lastDiscussedLeadRef.current;
+            }
+
+            // If still no single match, check for multiple leads sharing the same name
+            // and inject all of them so Mary can list options and ask which one
+            if (!specificMatch) {
+              const STOP = new Set(["from","the","pipeline","please","lead","find","tell","update","send","email","call","different","wrong","other","another","that","this","about","with","have","does","them","him","her","its","and","for","not","can","you","get","lets","just","did","was","are"]);
+              const nameWords = msgLower.split(/\s+/).map(w => w.replace(/[^a-z]/g,"")).filter(w => w.length > 2 && !STOP.has(w));
+              if (nameWords.length >= 1) {
+                const multiMatches = leads.filter(l => {
+                  const hay = `${l.full_name||""} ${l.first_name||""} ${l.last_name||}`.toLowerCase().split(/\s+/).map(w=>w.replace(/[^a-z]/g,""));
+                  return nameWords.every(w => hay.includes(w));
+                });
+                if (multiMatches.length > 1) {
+                  extra += `\n\nMultiple contacts match — list all options below and ask the user which one they mean:\n${multiMatches.map((l,i) => `${i+1}. ${l.full_name||`${l.first_name} ${l.last_name}`.trim()} — ${l.title||""},  ${l.company} (${l.state||""}) | status: ${l.status} | email: ${l.email||"none"} | id: ${l.id}`).join("\n")}`;
+                }
+              }
             }
 
             if (specificMatch) {
