@@ -470,6 +470,39 @@ function buildPipelineSummary(leads) {
   return `Finoveo Pipeline — ${leads.length} total leads:\n${lines.join("\n")}`;
 }
 
+// Words that are never name parts — shared by findLeadBySearch and findAllLeadMatches.
+const LEAD_NON_NAME = new Set([
+  // Common action / filler words
+  "from","the","pipeline","please","their","about","with","that","this","what","have","does",
+  "lead","find","tell","update","delete","remove","add","note","status","email","call","book",
+  "move","show","look","pull","info","contact","them","him","her","his","its","they","who",
+  "yes","okay","sure","just","can","you","get","lets","please","deal","did","was","are",
+  "into","onto","for","and","not","all","any","how","many","list","give","which","stage",
+  // Email / draft actions
+  "send","draft","compose","write","reply","forward","an","is","under","new","use","has",
+  // Pipeline stage names (so "booked stage", "closed leads", etc. don't hit lead names)
+  "booked","closed","accepted","contacted","requested","replied","interested",
+  "second","following","followed","outreach","prospect","prospects","emailed",
+]);
+
+// Returns ALL leads whose name/company words tie at the highest score for the query.
+// Use this when you need to detect ambiguous (same-name) matches, not just pick a winner.
+function findAllLeadMatches(leads, query) {
+  const q = query.toLowerCase();
+  const queryNameWordCount = q.split(/\s+/).map(w => w.replace(/[^a-z]/g,"")).filter(w => w.length > 2 && !LEAD_NON_NAME.has(w)).length;
+  const qWords = new Set(q.split(/\s+/).map(w => w.replace(/[^a-z]/g,"")).filter(w => w.length > 0));
+  const scored = leads.map(l => {
+    const nw = `${l.full_name||""} ${l.first_name||""} ${l.last_name||""} ${l.company||""}`
+      .toLowerCase().split(/\s+/).map(w => w.replace(/[^a-z]/g,"")).filter(w => w.length > 2);
+    return { l, score: nw.filter(w => qWords.has(w)).length };
+  }).filter(x => x.score > 0).sort((a, b) => b.score - a.score);
+  if (scored.length === 0) return [];
+  const minScore = Math.min(Math.max(queryNameWordCount, 1), 2);
+  if (scored[0].score < minScore) return [];
+  const topScore = scored[0].score;
+  return scored.filter(x => x.score === topScore).map(x => x.l);
+}
+
 // preferLead: when multiple leads tie at the top score, prefer this one (e.g. lastDiscussedLeadRef).
 // If still ambiguous after preference check, return null so Claude asks for clarification.
 function findLeadBySearch(leads, query, preferLead = null) {
@@ -478,17 +511,7 @@ function findLeadBySearch(leads, query, preferLead = null) {
   // Words that are NOT name parts — used to gauge how many "name words" the query has.
   // Pipeline stage names and common action/question words are all excluded so they
   // never cause false lead matches (e.g. "booked" or "stage" in "who is in the booked stage?").
-  const NON_NAME = new Set([
-    // Action / question words
-    "from","the","pipeline","please","their","about","with","that","this","what","have","does",
-    "lead","find","tell","update","delete","remove","add","note","status","email","call","book",
-    "move","show","look","pull","info","contact","them","him","her","his","its","they","who",
-    "yes","okay","sure","just","can","you","get","lets","please","deal","did","was","are",
-    "into","onto","for","and","not","all","any","how","many","list","give","which","stage",
-    // Pipeline stage names (so "booked stage", "closed leads", etc. don't hit lead names)
-    "booked","closed","accepted","contacted","requested","replied","interested",
-    "second","following","followed","outreach","prospect","prospects",
-  ]);
+  const NON_NAME = LEAD_NON_NAME;
   // Count query words that look like real name parts (length > 2, not a known stop/action word)
   const queryNameWordCount = q
     .split(/\s+/)
@@ -1938,19 +1961,17 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               specificMatch = leads.find(l => l.id === lastDiscussedLeadRef.current.id) || lastDiscussedLeadRef.current;
             }
 
-            // If still no single match, check for multiple leads sharing the same name
-            // and inject all of them so Mary can list options and ask which one
-            if (!specificMatch) {
-              const STOP = new Set(["from","the","pipeline","please","lead","find","tell","update","send","email","call","different","wrong","other","another","that","this","about","with","have","does","them","him","her","its","and","for","not","can","you","get","lets","just","did","was","are"]);
-              const nameWords = msgLower.split(/\s+/).map(w => w.replace(/[^a-z]/g,"")).filter(w => w.length > 2 && !STOP.has(w));
-              if (nameWords.length >= 1) {
-                const multiMatches = leads.filter(l => {
-                  const hay = `${l.full_name||""} ${l.first_name||""} ${l.last_name||}`.toLowerCase().split(/\s+/).map(w=>w.replace(/[^a-z]/g,""));
-                  return nameWords.every(w => hay.includes(w));
-                });
-                if (multiMatches.length > 1) {
-                  extra += `\n\nMultiple contacts match — list all options below and ask the user which one they mean:\n${multiMatches.map((l,i) => `${i+1}. ${l.full_name||`${l.first_name} ${l.last_name}`.trim()} — ${l.title||""},  ${l.company} (${l.state||""}) | status: ${l.status} | email: ${l.email||"none"} | id: ${l.id}`).join("\n")}`;
-                }
+            // If still no single match, use findAllLeadMatches (shares the same NON_NAME set)
+            // to detect ties. This fires even for Gmail/draft tasks so "draft email to Bill Jones"
+            // correctly surfaces the disambiguation prompt instead of silently failing.
+            if (!specificMatch && !hasPronounRef) {
+              const allMatches = findAllLeadMatches(leads, msgLower);
+              if (allMatches.length === 1) {
+                // Exactly one match that findLeadBySearch missed (e.g. minScore was inflated) — use it
+                specificMatch = allMatches[0];
+                lastDiscussedLeadRef.current = specificMatch;
+              } else if (allMatches.length > 1) {
+                extra += `\n\nMultiple contacts match — list all options below and ask the user which one they mean:\n${allMatches.map((l,i) => `${i+1}. ${l.full_name||`${l.first_name} ${l.last_name}`.trim()} — ${l.title||""}, ${l.company} (${l.state||""}) | status: ${l.status} | email: ${l.email||"none"} | id: ${l.id}`).join("\n")}`;
               }
             }
 
