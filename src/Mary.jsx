@@ -417,28 +417,46 @@ function parseResponse(text) {
 // Uses /api/pipeline which fetches the real total then pulls ALL pages
 // in parallel — 100% sheet coverage, no CORS issues, no sampling gaps.
 
-async function fetchOutboundLeads() {
-  const normalize = l => {
-    const r = {
-      ...l,
-      lead_score: parseInt(l.lead_score) || 0,
-      linkedin_step: parseInt(l.linkedin_step) || 0,
-      status: (l.status || "not_contacted").toLowerCase().trim().replace(/\s+/g, "_"),
-    };
-    if (r._sheet) {
-      if (r._sheet === "Finoveo") r.institution_type = "Bank / Credit Union";
-      else if (r._sheet === "CUSO Partners") r.institution_type = "CUSO Partner";
-      else if (r._sheet === "State Programs") r.institution_type = "State Programs";
-      else if (r._sheet === "Universities") r.institution_type = "University";
-      else if (r._sheet === "401k TPA") r.institution_type = "401k/TPA";
-    }
-    return r;
+// Shared normalization applied to every lead from every fetch path.
+// Handles column-header differences across the 5 sheet tabs.
+function normalizeLeadFields(l) {
+  const sheet = l._sheet || l.sheet || "";
+  // Field aliases: different tabs use different column names
+  const company = l.company || l.organization || l.Organization || l.university || l.University || "";
+  const full_name = l.full_name || l["Contact Name"] || (
+    (l.first_name || l.last_name) ? `${l.first_name || ""} ${l.last_name || ""}`.trim() : ""
+  );
+  const email = l.email || l.Email || "";
+  const title = l.title || l.Title || "";
+  const status_raw = l.status || l.Status || "not_contacted";
+
+  const r = {
+    ...l,
+    company,
+    full_name,
+    email,
+    title,
+    lead_score: parseInt(l.lead_score) || 0,
+    linkedin_step: parseInt(l.linkedin_step) || 0,
+    status: status_raw.toLowerCase().trim().replace(/\s+/g, "_"),
   };
+
+  // institution_type unconditionally derived from _sheet tab name
+  if (sheet === "Finoveo") r.institution_type = "Bank / Credit Union";
+  else if (sheet === "CUSO Partners") r.institution_type = "CUSO Partner";
+  else if (sheet === "State Programs") r.institution_type = "State Programs";
+  else if (sheet === "Universities") r.institution_type = "University";
+  else if (sheet === "401k TPA") r.institution_type = "401k/TPA";
+
+  return r;
+}
+
+async function fetchOutboundLeads() {
   const res = await fetch("/api/pipeline");
   if (!res.ok) throw new Error("Pipeline fetch failed");
   const data = await res.json();
   if (!data.success) throw new Error(data.error || "Failed to fetch leads");
-  return (data.data || []).map(normalize);
+  return (data.data || []).map(normalizeLeadFields);
 }
 
 async function updateOutboundLead(id, updates) {
@@ -865,7 +883,6 @@ const ppFmtD = d => { if(!d||d==="") return "—"; return new Date(d+"T12:00:00"
 const ppHasEmail = l => l.email && l.email.includes("@");
 const ppFmtS = s => P_STAGES_LABELS[s] || (s||"").replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
 
-// Infer vertical segment from the _sheet field stamped by Apps Script
 const PP_SEGMENTS = ["All","Banks & CUs","401k TPA","CUSO Partners","Universities","State Programs"];
 const ppInferSegment = l => {
   const s = (l._sheet || "").toLowerCase();
@@ -946,17 +963,7 @@ async function ppGsFetch(onP) {
     const results = await Promise.all(offsets.map(off => fetch(base+"&offset="+off).then(r=>r.json())));
     for (const d of results) { all = all.concat(d.data||[]); if(onP) onP(all.length, tot); }
   }
-  return all.map(l => {
-    const r = {...l, lead_score: parseInt(l.lead_score)||0, linkedin_step: parseInt(l.linkedin_step)||0};
-    if (r._sheet) {
-      if (r._sheet === "Finoveo") r.institution_type = "Bank / Credit Union";
-      else if (r._sheet === "CUSO Partners") r.institution_type = "CUSO Partner";
-      else if (r._sheet === "State Programs") r.institution_type = "State Programs";
-      else if (r._sheet === "Universities") r.institution_type = "University";
-      else if (r._sheet === "401k TPA") r.institution_type = "401k/TPA";
-    }
-    return r;
-  });
+  return all.map(normalizeLeadFields);
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────
@@ -1732,13 +1739,8 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
     setPpLoading(true); setPpLoadProg({p:0,t:0});
     try {
       let d = await ppGsFetch((p,t) => setPpLoadProg({p,t}));
-      d = d.map(l => ({
-        ...l,
-        lead_score: parseInt(l.lead_score)||0,
-        linkedin_step: parseInt(l.linkedin_step)||0,
-        status: (l.status||"not_contacted").toLowerCase().trim().replace(/\s+/g,"_"),
-        persona: l.persona || ppClassPersona(l.title),
-      }));
+      // ppGsFetch already runs normalizeLeadFields; just add persona
+      d = d.map(l => ({ ...l, persona: l.persona || ppClassPersona(l.title) }));
       setPpLeads(d);
       pipelineCacheRef.current = { leads: d, ts: Date.now() };
       ppFlash(`Synced ${d.length} leads`);
