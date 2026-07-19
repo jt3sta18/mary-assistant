@@ -418,13 +418,22 @@ function parseResponse(text) {
 // in parallel — 100% sheet coverage, no CORS issues, no sampling gaps.
 
 async function fetchOutboundLeads() {
-  const normalize = l => ({
-    ...l,
-    lead_score: parseInt(l.lead_score) || 0,
-    linkedin_step: parseInt(l.linkedin_step) || 0,
-    // Normalize status to lowercase so stage matching always works
-    status: (l.status || "not_contacted").toLowerCase().trim().replace(/\s+/g, "_"),
-  });
+  const normalize = l => {
+    const r = {
+      ...l,
+      lead_score: parseInt(l.lead_score) || 0,
+      linkedin_step: parseInt(l.linkedin_step) || 0,
+      status: (l.status || "not_contacted").toLowerCase().trim().replace(/\s+/g, "_"),
+    };
+    if (r._sheet) {
+      if (r._sheet === "Finoveo") r.institution_type = "Bank / Credit Union";
+      else if (r._sheet === "CUSO Partners") r.institution_type = "CUSO Partner";
+      else if (r._sheet === "State Programs") r.institution_type = "State Programs";
+      else if (r._sheet === "Universities") r.institution_type = "University";
+      else if (r._sheet === "401k TPA") r.institution_type = "401k/TPA";
+    }
+    return r;
+  };
   const res = await fetch("/api/pipeline");
   if (!res.ok) throw new Error("Pipeline fetch failed");
   const data = await res.json();
@@ -898,16 +907,16 @@ function ppEmailPrompt(l) {
 
 function ppLiPrompt(l) {
   const p = l.persona || ppClassPersona(l.title);
-  const seg = ppInferSegment(l);
+  const it = l.institution_type || "Bank / Credit Union";
   const nm = (l.full_name || `${l.first_name||""} ${l.last_name||""}`).trim();
   const verticals = {
-    "401k TPA": "This is a 401k/TPA contact. Frame around participant engagement, retirement outcomes, ERISA differentiation, and data-driven plan benchmarking. No bank-specific language.",
-    "Universities": "This is a university contact. Frame around student financial outcomes, retention, CFP Board alignment, and mission-driven partnership. No bank-specific language.",
+    "401k/TPA": "This is a 401k/TPA contact. Frame around participant engagement, retirement outcomes, ERISA differentiation, and data-driven plan benchmarking. No bank-specific language.",
+    "University": "This is a university contact. Frame around student financial outcomes, retention, CFP Board alignment, and mission-driven partnership. No bank-specific language.",
     "State Programs": "This is a state program contact. Frame around measurement gaps, mission alignment, multi-language capabilities, and community impact. Mission-partner tone. No bank-specific language.",
-    "CUSO Partners": "This is a CUSO partner contact. Frame around credit union collaboration, shared services, and white-label deployment advantages.",
+    "CUSO Partner": "This is a CUSO partner contact. Frame around credit union collaboration, shared services, and white-label deployment advantages.",
   };
-  const vNote = verticals[seg] ? "\nVERTICAL: "+verticals[seg] : "";
-  return "Generate LinkedIn outreach messages for Finoveo's founder.\n\nFINOVEO: "+PP_FIN+"\n\nLEAD: "+nm+", "+(l.title||"?")+" at "+(l.company||"?")+" ("+(l.institution_type||seg)+", "+(l.state||"?")+")\nLinkedIn about: "+(l.linkedin_about||"N/A")+"\nPersona: "+(PP_PA[p]||PP_PA.Other)+vNote+"\n\nConcise, sharp, professional. No fake compliments. No sign-offs.\n\nReturn ONLY valid JSON:\n{\"linkedin_connection_note\":\"<under 280 chars>\",\"linkedin_dm_1\":\"<3-4 sentences>\",\"linkedin_followup_1\":\"<2-3 sentences>\",\"linkedin_followup_2\":\"<1-2 sentences>\"}";
+  const vNote = verticals[it] ? "\nVERTICAL: "+verticals[it] : "";
+  return "Generate LinkedIn outreach messages for Finoveo's founder.\n\nFINOVEO: "+PP_FIN+"\n\nLEAD: "+nm+", "+(l.title||"?")+" at "+(l.company||"?")+" ("+it+", "+(l.state||"?")+")\nLinkedIn about: "+(l.linkedin_about||"N/A")+"\nPersona: "+(PP_PA[p]||PP_PA.Other)+vNote+"\n\nConcise, sharp, professional. No fake compliments. No sign-offs.\n\nReturn ONLY valid JSON:\n{\"linkedin_connection_note\":\"<under 280 chars>\",\"linkedin_dm_1\":\"<3-4 sentences>\",\"linkedin_followup_1\":\"<2-3 sentences>\",\"linkedin_followup_2\":\"<1-2 sentences>\"}";
 }
 
 async function ppAiCall(prompt) {
@@ -937,7 +946,17 @@ async function ppGsFetch(onP) {
     const results = await Promise.all(offsets.map(off => fetch(base+"&offset="+off).then(r=>r.json())));
     for (const d of results) { all = all.concat(d.data||[]); if(onP) onP(all.length, tot); }
   }
-  return all.map(l=>({...l,lead_score:parseInt(l.lead_score)||0,linkedin_step:parseInt(l.linkedin_step)||0}));
+  return all.map(l => {
+    const r = {...l, lead_score: parseInt(l.lead_score)||0, linkedin_step: parseInt(l.linkedin_step)||0};
+    if (r._sheet) {
+      if (r._sheet === "Finoveo") r.institution_type = "Bank / Credit Union";
+      else if (r._sheet === "CUSO Partners") r.institution_type = "CUSO Partner";
+      else if (r._sheet === "State Programs") r.institution_type = "State Programs";
+      else if (r._sheet === "Universities") r.institution_type = "University";
+      else if (r._sheet === "401k TPA") r.institution_type = "401k/TPA";
+    }
+    return r;
+  });
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────
@@ -1178,7 +1197,6 @@ export default function Mary() {
   const [ppView, setPpView] = useState("all");
   const [ppSearch, setPpSearch] = useState("");
   const [ppFP, setPpFP] = useState("");
-  const [ppFT, setPpFT] = useState("");
   const [ppFS, setPpFS] = useState("");
   const [ppFE, setPpFE] = useState("");
   const [ppSortBy, setPpSortBy] = useState("full_name");
@@ -2401,7 +2419,15 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
   // ─── Pipeline computed values ────────────────────────────────────────
   const ppSegLeads = useMemo(() => {
     if (ppSegment === "All") return ppLeads;
-    return ppLeads.filter(l => ppInferSegment(l) === ppSegment);
+    const typeMap = {
+      "Banks & CUs": "Bank / Credit Union",
+      "401k TPA": "401k/TPA",
+      "CUSO Partners": "CUSO Partner",
+      "Universities": "University",
+      "State Programs": "State Programs",
+    };
+    const t = typeMap[ppSegment];
+    return t ? ppLeads.filter(l => l.institution_type === t) : ppLeads;
   }, [ppLeads, ppSegment]);
 
   const ppFiltered = useMemo(() => {
@@ -2418,7 +2444,6 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
     else if(ppView==="closed") r=r.filter(l=>l.status==="closed");
     if(ppSearch){const q=ppSearch.toLowerCase();r=r.filter(l=>`${l.full_name} ${l.first_name} ${l.last_name} ${l.company} ${l.title} ${l.email}`.toLowerCase().includes(q))}
     if(ppFP) r=r.filter(l=>l.persona===ppFP);
-    if(ppFT) r=r.filter(l=>l.institution_type===ppFT);
     if(ppFS) r=r.filter(l=>l.state===ppFS);
     if(ppFE==="has") r=r.filter(l=>ppHasEmail(l));
     if(ppFE==="no") r=r.filter(l=>!ppHasEmail(l));
@@ -2428,7 +2453,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
     if(ppFE==="bounced") r=r.filter(l=>(l.email_status||"").toLowerCase()==="bounced");
     r.sort((a,b)=>{let av=a[ppSortBy],bv=b[ppSortBy];if(!isNaN(Number(av))){av=Number(av)||0;bv=Number(bv)||0}else{av=String(av||"").toLowerCase();bv=String(bv||"").toLowerCase()}return ppSortDir==="asc"?(av<bv?-1:av>bv?1:0):(av>bv?-1:av<bv?1:0)});
     return r;
-  }, [ppSegLeads,ppView,ppSearch,ppFP,ppFT,ppFS,ppFE,ppSortBy,ppSortDir]);
+  }, [ppSegLeads,ppView,ppSearch,ppFP,ppFS,ppFE,ppSortBy,ppSortDir]);
 
   const ppTotalPg = Math.ceil(ppFiltered.length / ppPgSz);
   const ppPaged = ppFiltered.slice((ppPgN-1)*ppPgSz, ppPgN*ppPgSz);
@@ -2478,7 +2503,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
         <div style={S.headerRow}>
           <div>
             {tab === "today"
-              ? <div style={S.logo}><span style={{color:"#00dba8"}}>{`Hi, ${userName || "James"}`}</span></div>
+              ? <div style={S.logo}><span style={{color:"#00dba8",textShadow:"0 0 18px rgba(0,219,168,0.6)"}}>{`Hi, ${userName || "James"}`}</span></div>
               : <div style={{...S.logo, fontSize:18, color:"rgba(255,255,255,0.85)", fontWeight:600}}>Inbox</div>
             }
             <div style={S.dateLbl}>{dateStr}</div>
@@ -2910,19 +2935,6 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
               ))}
             </div>
 
-            {/* Email funnel — only shows when there's email activity */}
-            {ppEmailFunnel.emailed > 0 && (
-              <div style={{display:"flex",alignItems:"center",gap:12,padding:"4px 14px 6px",flexShrink:0}}>
-                <span style={{fontSize:10,textTransform:"uppercase",letterSpacing:1.5,color:PP.muted,fontFamily:PPF}}>Email</span>
-                <span style={{fontSize:12,color:PP.gold,fontFamily:PPF}}>✉ {ppEmailFunnel.emailed}</span>
-                <span style={{fontSize:12,color:PP.teal2,fontFamily:PPF}}>✓ {ppEmailFunnel.replied}</span>
-                <span style={{fontSize:12,color:PP.red,fontFamily:PPF}}>✕ {ppEmailFunnel.bounced}</span>
-                {ppEmailFunnel.rate > 0 && <span style={{fontSize:11,color:PP.muted,fontFamily:PPF}}>{ppEmailFunnel.rate}% reply rate</span>}
-                <div style={{flex:1,height:2,background:PP.deep,borderRadius:1,overflow:"hidden"}}>
-                  <div style={{width:`${Math.min(ppEmailFunnel.rate,100)}%`,height:"100%",background:`linear-gradient(90deg,${PP.teal},${PP.teal2})`,borderRadius:1,transition:"width .4s"}}/>
-                </div>
-              </div>
-            )}
 
             {/* Filter row */}
             <div style={{display:"flex",alignItems:"center",gap:6,padding:"0 14px 8px",flexWrap:"wrap",flexShrink:0}}>
@@ -2932,7 +2944,6 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                 return <>
                   <input value={ppSearch} onChange={e=>setPpSearch(e.target.value)} placeholder="Search…" style={{...inpSt,width:140}}/>
                   <select value={ppFP} onChange={e=>setPpFP(e.target.value)} style={slSt}><option value="">All Personas</option>{PP_PERSONAS.map(p=><option key={p}>{p}</option>)}</select>
-                  <select value={ppFT} onChange={e=>setPpFT(e.target.value)} style={slSt}><option value="">All Types</option>{["Bank","Credit Union","Banking","Other"].map(t=><option key={t}>{t}</option>)}</select>
                   <select value={ppFS} onChange={e=>setPpFS(e.target.value)} style={slSt}><option value="">All States</option>{ppStates.map(s=><option key={s}>{s}</option>)}</select>
                   <select value={ppFE} onChange={e=>setPpFE(e.target.value)} style={slSt}>
                     <option value="">All Emails</option>
@@ -2943,7 +2954,7 @@ Keep each section short — 2 to 4 lines max. No long paragraphs. Use bullet poi
                     <option value="email_replied">Replied</option>
                     <option value="bounced">Bounced</option>
                   </select>
-                  {(ppSearch||ppFP||ppFT||ppFS||ppFE)&&<button onClick={()=>{setPpSearch("");setPpFP("");setPpFT("");setPpFS("");setPpFE("")}} style={{fontSize:11,color:PP.muted,background:"none",border:"none",cursor:"pointer",fontFamily:PPF}}>Clear</button>}
+                  {(ppSearch||ppFP||ppFS||ppFE)&&<button onClick={()=>{setPpSearch("");setPpFP("");setPpFS("");setPpFE("")}} style={{fontSize:11,color:PP.muted,background:"none",border:"none",cursor:"pointer",fontFamily:PPF}}>Clear</button>}
                   <div style={{flex:1}}/>
                   <span style={{fontSize:11,color:PP.muted,fontFamily:"'DM Mono',monospace"}}>{ppFiltered.length} leads</span>
                 </>;
