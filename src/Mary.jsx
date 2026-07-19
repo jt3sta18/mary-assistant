@@ -141,7 +141,7 @@ RULES:
   "delete_lead": {"search": "company or person name to delete"},
   "research_institution": {"name": "FMS Bank"},
   "find_email": {"first_name": "John", "last_name": "Smith", "company": "Citizens Bank", "domain": "citizensbank.com"},
-  "add_lead": {"first_name": "Maria", "last_name": "Chen", "full_name": "Maria Chen", "title": "VP of Digital Banking", "company": "Rockland Trust", "institution_type": "Bank", "state": "MA", "linkedin_url": "", "asset_size": "", "email": "", "persona": "Digital"},
+  "add_lead": {"first_name": "Maria", "last_name": "Chen", "full_name": "Maria Chen", "title": "VP of Digital Banking", "company": "Rockland Trust", "institution_type": "Bank / Credit Union", "state": "MA", "linkedin_url": "", "asset_size": "", "email": "", "persona": "Digital"},
   "add_leads_bulk": true,
   "generate_linkedin": {"search": "company or person name of lead in pipeline"}
 }
@@ -174,7 +174,7 @@ When asked to delete or remove a lead, use delete_lead.
 When asked to update any field (email, title, status, notes), use update_lead with the relevant field in updates.
 When asked to research a bank or credit union (e.g. "get me the intel on FMS Bank"), use research_institution — this calls FDIC + AI and returns a full pre-call brief.
 When asked for someone's email, FIRST check the lead data provided in the conversation — the email field is included for every lead in the compact list and in the full detail block. If you see an email there, return it immediately. If the email field is blank or absent, automatically use find_email to look it up via Hunter — do not ask, just try it. The system will search by name and company and save any result back to the pipeline. Never say a lead isn't in the pipeline if their name appears in the lead list.
-When asked to add a single lead (e.g. "add John Smith, CEO at FMS Bank in PA"), use add_lead with all available fields. Infer institution_type (Bank or Credit Union) from context. Classify persona from title: CEO/President→CEO, CMO/Marketing→CMO, Digital/Tech/CTO→Digital, Retail/Branch/Lending→Retail, Strategy/BizDev→Strategy, Product→Product.
+When asked to add a single lead (e.g. "add John Smith, CEO at FMS Bank in PA"), use add_lead with all available fields. Set institution_type to exactly one of: "Bank / Credit Union", "401k/TPA", "CUSO Partner", "University", "State Programs". Infer from context (bank/CU→"Bank / Credit Union", 401k/retirement/TPA→"401k/TPA", CUSO→"CUSO Partner", university/college→"University", state program→"State Programs"). Default to "Bank / Credit Union". Classify persona from title: CEO/President→CEO, CMO/Marketing→CMO, Digital/Tech/CTO→Digital, Retail/Branch/Lending→Retail, Strategy/BizDev→Strategy, Product→Product.
 When a CSV file is attached and user asks to add/import the leads to the pipeline, set add_leads_bulk: true — the app will handle the column mapping and import automatically.
 When asked to draft LinkedIn outreach for a specific lead (e.g. "draft LinkedIn messages for Sarah at Citizens Bank"), use generate_linkedin with the lead's name or company as "search".
 
@@ -1134,8 +1134,10 @@ function PPDrawer({lead,onClose,onUpd,onAct,onDel,aiL}){
   </div>;
 }
 
+const PP_INST_TYPES = ["Bank / Credit Union","401k/TPA","CUSO Partner","University","State Programs"];
+
 function PPAddLead({onClose,onAdd}){
-  const[f,sF]=useState({first_name:"",last_name:"",email:"",title:"",company:"",company_url:"",institution_type:"Bank",state:"",linkedin_url:"",asset_size:""});
+  const[f,sF]=useState({first_name:"",last_name:"",email:"",title:"",company:"",company_url:"",institution_type:"Bank / Credit Union",state:"",linkedin_url:"",asset_size:""});
   const set=(k,v)=>sF(p=>({...p,[k]:v}));
   const inp=(l,k,ph)=><div style={{marginBottom:10}}><div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1.5,color:PP.muted,marginBottom:3,fontFamily:PPF}}>{l}</div><input value={f[k]} onChange={e=>set(k,e.target.value)} placeholder={ph||""} style={{width:"100%",padding:"8px 12px",fontSize:13,background:PP.navy,border:`1px solid ${PP.border}`,borderRadius:8,color:PP.white,outline:"none",boxSizing:"border-box",fontFamily:PPF}}/></div>;
   const go=()=>{onAdd({...f,id:crypto.randomUUID(),full_name:`${f.first_name} ${f.last_name}`.trim(),status:"not_contacted",linkedin_step:0,lead_score:0,persona:ppClassPersona(f.title),export_status:"not_exported",created_at:new Date().toISOString(),updated_at:new Date().toISOString()});onClose()};
@@ -1144,7 +1146,7 @@ function PPAddLead({onClose,onAdd}){
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 12px"}}>{inp("First Name","first_name","John")}{inp("Last Name","last_name","Smith")}</div>
     {inp("Email","email","john@bank.com")}{inp("Title","title","CEO")}{inp("Company","company","First National Bank")}{inp("Company URL","company_url","firstnationalbank.com")}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 12px"}}>
-      <div style={{marginBottom:10}}><div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1.5,color:PP.muted,marginBottom:3,fontFamily:PPF}}>Type</div><select value={f.institution_type} onChange={e=>set("institution_type",e.target.value)} style={{width:"100%",padding:"8px 12px",fontSize:13,background:PP.navy,border:`1px solid ${PP.border}`,borderRadius:8,color:PP.white,outline:"none",fontFamily:PPF}}><option>Bank</option><option>Credit Union</option><option>Other</option></select></div>
+      <div style={{marginBottom:10}}><div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1.5,color:PP.muted,marginBottom:3,fontFamily:PPF}}>Institution Type</div><select value={f.institution_type} onChange={e=>set("institution_type",e.target.value)} style={{width:"100%",padding:"8px 12px",fontSize:13,background:PP.navy,border:`1px solid ${PP.border}`,borderRadius:8,color:PP.white,outline:"none",fontFamily:PPF}}>{PP_INST_TYPES.map(t=><option key={t}>{t}</option>)}</select></div>
       {inp("State","state","MA")}
     </div>
     {inp("LinkedIn URL","linkedin_url")}{inp("Asset Size","asset_size","$2.1B")}
